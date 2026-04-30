@@ -99,6 +99,11 @@ export default function SignDocument() {
   const [sdSaveToProfile, setSdSaveToProfile] = useState(true);
   const [sdSaving, setSdSaving] = useState(false);
 
+  // DocuSign-style guided flow
+  const [started, setStarted] = useState(false);
+  const [currentFieldId, setCurrentFieldId] = useState<number | null>(null);
+  const fieldRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
   useEffect(() => {
     loadDocument();
   }, [docId]);
@@ -182,6 +187,27 @@ export default function SignDocument() {
     setSdSaveToProfile(true);
     sigPadRef.current?.clear();
   };
+
+  const scrollToField = useCallback((fieldId: number) => {
+    const el = fieldRefs.current.get(fieldId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const sortByDocOrder = (fs: Field[]) =>
+    [...fs].sort((a, b) =>
+      a.page !== b.page ? a.page - b.page : a.y !== b.y ? a.y - b.y : a.x - b.x,
+    );
+
+  const handleStartSigning = useCallback(() => {
+    setStarted(true);
+    const pending = sortByDocOrder(
+      fields.filter((f) => f.signerId === mySigner?.id && !f.filledImage),
+    );
+    if (pending[0]) {
+      setCurrentFieldId(pending[0].id);
+      setTimeout(() => scrollToField(pending[0].id), 200);
+    }
+  }, [fields, mySigner, scrollToField]);
 
   const openFieldDialog = (field: Field) => {
     if (!mySigner || field.signerId !== mySigner.id) return;
@@ -267,20 +293,31 @@ export default function SignDocument() {
       if (!res.ok) throw new Error("Failed to fill field");
       const result = await res.json() as { documentCompleted: boolean };
 
-      setFields((prev) => prev.map((f) => f.id === activeField.id ? { ...f, filledImage: imageData } : f));
+      const updatedFields = fields.map((f) => f.id === activeField.id ? { ...f, filledImage: imageData } : f);
+      setFields(updatedFields);
       setSignDialogOpen(false);
       setActiveField(null);
 
       if (result.documentCompleted) {
         toast({ title: "Document complete!", description: "All signers have signed. You can download the signed copy." });
         setDone(true);
+        setCurrentFieldId(null);
         await loadDocument();
       } else {
-        const updated = fields.map((f) => f.id === activeField.id ? { ...f, filledImage: imageData } : f);
-        const myFields = updated.filter((f) => f.signerId === mySigner?.id);
-        if (myFields.every((f) => f.filledImage)) {
+        const myUpdated = updatedFields.filter((f) => f.signerId === mySigner?.id);
+        if (myUpdated.every((f) => f.filledImage)) {
           toast({ title: "You've signed all your fields!", description: "Waiting for other signers." });
           setDone(true);
+          setCurrentFieldId(null);
+        } else {
+          // Advance to next pending field in document order
+          const nextPending = sortByDocOrder(
+            updatedFields.filter((f) => f.signerId === mySigner?.id && !f.filledImage),
+          );
+          if (nextPending[0]) {
+            setCurrentFieldId(nextPending[0].id);
+            setTimeout(() => scrollToField(nextPending[0].id), 400);
+          }
         }
       }
     } catch {
@@ -291,7 +328,8 @@ export default function SignDocument() {
   };
 
   const myFields = fields.filter((f) => f.signerId === mySigner?.id);
-  const myPendingFields = myFields.filter((f) => !f.filledImage);
+  const myPendingFields = sortByDocOrder(myFields.filter((f) => !f.filledImage));
+  const pendingCount = myPendingFields.length;
 
   if (loading) {
     return (
@@ -342,8 +380,15 @@ export default function SignDocument() {
                     key={f.id}
                     className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded cursor-pointer transition-colors ${
                       f.filledImage ? "text-muted-foreground" : "hover:bg-muted text-foreground"
-                    }`}
-                    onClick={() => !f.filledImage && openFieldDialog(f)}
+                    } ${f.id === currentFieldId ? "bg-amber-50 dark:bg-amber-950/30 ring-1 ring-amber-400" : ""}`}
+                    onClick={() => {
+                      if (!f.filledImage) {
+                        setCurrentFieldId(f.id);
+                        setTimeout(() => scrollToField(f.id), 50);
+                        if (!started) setStarted(true);
+                        openFieldDialog(f);
+                      }
+                    }}
                   >
                     {f.filledImage ? (
                       <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -395,36 +440,119 @@ export default function SignDocument() {
         )}
       </div>
 
+      {/* Right side: progress bar + scrollable PDF */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+      {/* Top progress / action bar */}
+      <div className="bg-background border-b px-4 py-2.5 flex items-center gap-3 shrink-0">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate">{doc?.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {done
+              ? "All your fields are signed ✓"
+              : started
+              ? `${pendingCount} field${pendingCount !== 1 ? "s" : ""} remaining — click the highlighted box`
+              : `${pendingCount} field${pendingCount !== 1 ? "s" : ""} require your signature`}
+          </p>
+        </div>
+        {!done && !started && (
+          <Button
+            onClick={handleStartSigning}
+            className="bg-amber-500 hover:bg-amber-600 text-white font-semibold gap-2 shrink-0"
+          >
+            <PenLine className="h-4 w-4" /> Start Signing
+          </Button>
+        )}
+        {!done && started && pendingCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => {
+              if (currentFieldId) scrollToField(currentFieldId);
+              else if (myPendingFields[0]) scrollToField(myPendingFields[0].id);
+            }}
+          >
+            Jump to Next →
+          </Button>
+        )}
+        {done && (
+          <Button size="sm" variant="outline" onClick={() => setLocation(`/documents/${docId}`)} className="shrink-0 gap-1.5">
+            View Document →
+          </Button>
+        )}
+      </div>
+
       <ScrollArea className="flex-1">
         <div className="flex flex-col items-center gap-6 py-6 px-4">
+
+          {/* Start Signing banner — shown before user clicks Start */}
+          {!done && !started && pages.length > 0 && (
+            <div
+              className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-5 flex items-center justify-between gap-4 shadow"
+              style={{ width: pages[0].width }}
+            >
+              <div className="space-y-1">
+                <p className="font-bold text-amber-900 dark:text-amber-200 text-base">
+                  Ready to sign?
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  You have <strong>{pendingCount} field{pendingCount !== 1 ? "s" : ""}</strong> to complete in this document.
+                  Click <strong>Start Signing</strong> to begin — we'll guide you through each one.
+                </p>
+              </div>
+              <Button
+                onClick={handleStartSigning}
+                className="bg-amber-500 hover:bg-amber-600 text-white font-bold gap-2 shrink-0 text-base px-5 py-5"
+              >
+                <PenLine className="h-5 w-5" /> Start Signing
+              </Button>
+            </div>
+          )}
+
           {pages.map((page, pageIndex) => (
             <div key={pageIndex} className="relative shadow-xl border border-border bg-white" style={{ width: page.width, height: page.height }}>
               <img src={page.dataUrl} alt={`Page ${pageIndex + 1}`} style={{ width: page.width, height: page.height, display: "block" }} draggable={false} />
               <div className="absolute inset-0" style={{ width: page.width, height: page.height }}>
-                {fields.filter((f) => f.page === pageIndex).map((field) => {
-                  const signer = signers.find((s) => s.id === field.signerId);
-                  const isMyField = field.signerId === mySigner?.id;
-                  const color = signer?.color ?? "#aaa";
+                {myFields.filter((f) => f.page === pageIndex).map((field) => {
+                  const color = mySigner?.color ?? "#2563eb";
+                  const isCurrent = field.id === currentFieldId && !field.filledImage;
                   return (
                     <div
                       key={field.id}
-                      className={`absolute border-2 rounded flex items-center justify-center transition-all ${
-                        isMyField && !field.filledImage ? "cursor-pointer hover:brightness-95" : ""
-                      }`}
+                      ref={(el) => {
+                        if (el) fieldRefs.current.set(field.id, el);
+                        else fieldRefs.current.delete(field.id);
+                      }}
+                      className={`absolute rounded flex items-center justify-center transition-all overflow-hidden ${
+                        !field.filledImage ? "cursor-pointer" : ""
+                      } ${isCurrent ? "animate-pulse" : ""}`}
                       style={{
                         left: `${field.x}%`, top: `${field.y}%`,
                         width: `${field.width}%`, height: `${field.height}%`,
-                        borderColor: color,
-                        background: field.filledImage ? "transparent" : `${color}18`,
-                        opacity: isMyField ? 1 : 0.5,
+                        border: isCurrent
+                          ? "2.5px solid #f59e0b"
+                          : field.filledImage
+                          ? `1.5px solid ${color}55`
+                          : `2px dashed ${color}`,
+                        background: field.filledImage
+                          ? "transparent"
+                          : isCurrent
+                          ? "#fef3c720"
+                          : `${color}12`,
+                        boxShadow: isCurrent ? "0 0 0 3px #fef3c7, 0 0 12px #f59e0b88" : undefined,
                       }}
-                      onClick={() => isMyField && !field.filledImage && openFieldDialog(field)}
+                      onClick={() => !field.filledImage && openFieldDialog(field)}
                     >
                       {field.filledImage ? (
-                        <img src={field.filledImage} className="w-full h-full object-contain p-0.5" />
+                        <img src={field.filledImage} className="w-full h-full object-contain p-0.5" draggable={false} />
+                      ) : isCurrent ? (
+                        <span className="text-[11px] font-bold px-1 truncate text-amber-700 flex items-center gap-0.5">
+                          ✍ Sign Here
+                        </span>
                       ) : (
                         <span className="text-[10px] font-semibold px-1 truncate" style={{ color }}>
-                          {isMyField ? `Click to ${FIELD_LABELS[field.fieldType] ?? "sign"}` : `${FIELD_LABELS[field.fieldType] ?? "Field"} — ${signer?.name}`}
+                          {FIELD_LABELS[field.fieldType] ?? "Sign"}
                         </span>
                       )}
                     </div>
@@ -438,6 +566,8 @@ export default function SignDocument() {
           ))}
         </div>
       </ScrollArea>
+
+      </div>{/* end right side */}
 
       {/* Reject Dialog */}
       <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
