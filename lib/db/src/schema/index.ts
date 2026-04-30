@@ -2,3 +2,7 @@ export * from "./users";
 export * from "./documents";
 export * from "./signatures";
 export * from "./activity";
+export * from "./document-signers";
+export * from "./document-fields";
+export * from "./signature-templates";
+export * from "./document-audit";

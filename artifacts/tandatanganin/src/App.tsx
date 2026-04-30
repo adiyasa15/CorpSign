@@ -10,6 +10,10 @@ import { ProtectedRoute } from "@/components/protected-route";
 import Dashboard from "@/pages/dashboard";
 import Documents from "@/pages/documents";
 import DocumentDetail from "@/pages/document-detail";
+import DocumentEditor from "@/pages/document-editor";
+import SignDocument from "@/pages/sign-document";
+import UploadDocument from "@/pages/upload-document";
+import SignatureSettings from "@/pages/signature-settings";
 import Signatures from "@/pages/signatures";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
@@ -30,17 +34,25 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route>
         <ProtectedRoute>
-          <Layout>
-            <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/documents" component={Documents} />
-              <Route path="/documents/:id" component={DocumentDetail} />
-              <Route path="/signatures" component={Signatures} />
-              <Route path="/settings" component={Settings} />
-              <Route path="/users" component={Users} />
-              <Route component={NotFound} />
-            </Switch>
-          </Layout>
+          <Switch>
+            <Route path="/documents/:id/editor" component={DocumentEditor} />
+            <Route path="/documents/:id/sign" component={SignDocument} />
+            <Route>
+              <Layout>
+                <Switch>
+                  <Route path="/" component={Dashboard} />
+                  <Route path="/documents/upload" component={UploadDocument} />
+                  <Route path="/documents/:id" component={DocumentDetail} />
+                  <Route path="/documents" component={Documents} />
+                  <Route path="/signatures" component={Signatures} />
+                  <Route path="/settings" component={Settings} />
+                  <Route path="/signature-settings" component={SignatureSettings} />
+                  <Route path="/users" component={Users} />
+                  <Route component={NotFound} />
+                </Switch>
+              </Layout>
+            </Route>
+          </Switch>
         </ProtectedRoute>
       </Route>
     </Switch>

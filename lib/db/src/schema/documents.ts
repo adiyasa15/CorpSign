@@ -2,17 +2,18 @@ import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const documentStatusEnum = pgEnum("document_status", ["pending", "signed", "rejected"]);
+export const documentStatusEnum = pgEnum("document_status", ["pending", "signed", "rejected", "in_progress", "completed", "draft"]);
 
 export const documentsTable = pgTable("documents", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
   fileName: text("file_name").notNull(),
+  filePath: text("file_path"),
   fileSize: integer("file_size").notNull(),
   status: documentStatusEnum("status").notNull().default("pending"),
-  signerName: text("signer_name").notNull(),
-  signerEmail: text("signer_email").notNull(),
+  signerName: text("signer_name").notNull().default(""),
+  signerEmail: text("signer_email").notNull().default(""),
   uploadedById: integer("uploaded_by_id"),
   signedAt: timestamp("signed_at"),
   signatureData: text("signature_data"),

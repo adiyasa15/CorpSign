@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -199,3 +199,89 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
     </div>
   );
 }
+
+export interface DrawingPadHandle {
+  getDataUrl: () => string;
+  clear: () => void;
+}
+
+interface DrawingPadProps {
+  height?: number;
+}
+
+const DrawingPad = forwardRef<DrawingPadHandle, DrawingPadProps>(function DrawingPad({ height = 160 }, ref) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasContent, setHasContent] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    getDataUrl: () => canvasRef.current?.toDataURL("image/png") ?? "",
+    clear: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+      setHasContent(false);
+    },
+  }));
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) { ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2.5; }
+  }, []);
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY,
+      };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsDrawing(true);
+    const { x, y } = getPos(e);
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) { ctx.beginPath(); ctx.moveTo(x, y); }
+  };
+
+  const drawMove = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const { x, y } = getPos(e);
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) { ctx.lineTo(x, y); ctx.stroke(); setHasContent(true); }
+  };
+
+  const stopDraw = () => { setIsDrawing(false); };
+
+  return (
+    <div className="relative" style={{ height }}>
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full touch-none bg-white cursor-crosshair"
+        style={{ height }}
+        onMouseDown={startDraw} onMouseMove={drawMove} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+        onTouchStart={startDraw} onTouchMove={drawMove} onTouchEnd={stopDraw}
+      />
+      {!hasContent && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-xs text-muted-foreground">Draw here</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+export default DrawingPad;

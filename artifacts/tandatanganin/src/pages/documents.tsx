@@ -4,8 +4,6 @@ import {
   useListDocuments, 
   useCreateDocument,
   getListDocumentsQueryKey,
-  getListDashboardSummaryQueryKey,
-  getListRecentActivityQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -68,7 +66,11 @@ export default function Documents() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Documents</h1>
           <p className="text-muted-foreground mt-1 text-lg">Manage and track your document signing requests.</p>
         </div>
-        {!isApprover && <CreateDocumentDialog />}
+        {!isApprover && (
+          <Button onClick={() => setLocation("/documents/upload")}>
+            <Plus className="h-4 w-4 mr-2" /> Upload Document
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
@@ -118,7 +120,7 @@ export default function Documents() {
               ))
             ) : documents && documents.length > 0 ? (
               documents.map((doc) => {
-                const isOwner = user?.role === "admin" || user?.role === "superadmin" || user?.id === doc.userId;
+                const isOwner = user?.role === "admin" || user?.role === "superadmin" || !isApprover;
                 return (
                   <TableRow key={doc.id} className="cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => setLocation(`/documents/${doc.id}`)}>
                     <TableCell className="font-medium">
@@ -186,14 +188,21 @@ export default function Documents() {
   );
 }
 
-function StatusBadge({ status }: { status: "pending" | "signed" | "rejected" }) {
+function StatusBadge({ status }: { status: string }) {
   switch (status) {
+    case "draft":
+      return <Badge variant="secondary" className="gap-1">Draft</Badge>;
     case "pending":
       return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900/50 gap-1"><Clock className="h-3 w-3" /> Pending</Badge>;
+    case "in_progress":
+      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50 gap-1"><Clock className="h-3 w-3" /> In Progress</Badge>;
     case "signed":
+    case "completed":
       return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> Signed</Badge>;
     case "rejected":
       return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50 gap-1"><XCircle className="h-3 w-3" /> Rejected</Badge>;
+    default:
+      return <Badge variant="secondary">{status}</Badge>;
   }
 }
 

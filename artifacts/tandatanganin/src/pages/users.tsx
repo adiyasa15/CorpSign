@@ -7,7 +7,7 @@ import {
   useDeleteUser,
   getListUsersQueryKey,
 } from "@workspace/api-client-react";
-import { UserProfile } from "@workspace/api-client-react/src/generated/api.schemas";
+import { UserProfile } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,7 +108,7 @@ function UserDialog({ user, open, setOpen }: { user?: UserProfile; open: boolean
       email: user?.email || "",
       phonePrefix: defaultPrefix,
       phoneNum: defaultPhone,
-      company: user?.company || "",
+      company: user?.companyName || "",
       division: user?.division || "",
       role: (user?.role as any) || "user",
       password: "",
@@ -459,12 +459,12 @@ export default function Users() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col text-sm">
-                      <span>{u.company || "-"}</span>
+                      <span>{u.companyName || "-"}</span>
                       <span className="text-muted-foreground">{u.division || ""}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    {u.googleId ? <Badge variant="outline">Yes</Badge> : <span className="text-muted-foreground text-sm">No</span>}
+                    {u.hasGoogleSSO ? <Badge variant="outline">Yes</Badge> : <span className="text-muted-foreground text-sm">No</span>}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">

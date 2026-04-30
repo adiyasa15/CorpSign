@@ -1,79 +1,173 @@
-import { useRoute } from "wouter";
-import { useState } from "react";
-import { 
-  useGetDocument, 
-  useUpdateDocument, 
-  useSignDocument,
-  getGetDocumentQueryKey,
-  useListSignatures
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useRoute, useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import * as pdfjsLib from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-import { Link } from "wouter";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
+  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 import { formatDate, formatBytes } from "@/lib/format";
-import { SignaturePad } from "@/components/signature-pad";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url,
+).toString();
+
+interface DocDetail {
+  id: number;
+  title: string;
+  description?: string;
+  fileName: string;
+  filePath: string | null;
+  fileSize: number;
+  status: string;
+  createdAt: string;
+  signedAt: string | null;
+  uploadedById: number | null;
+  signers: Signer[];
+  fields: Field[];
+}
+
+interface Signer {
+  id: number;
+  name: string;
+  email: string;
+  signerOrder: number;
+  status: string;
+  color: string;
+  completedAt: string | null;
+}
+
+interface Field {
+  id: number;
+  signerId: number;
+  fieldType: string;
+  page: number;
+  filledImage: string | null;
+}
+
+interface AuditEntry {
+  id: number;
+  actorName: string;
+  actorEmail: string;
+  eventType: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+const STATUS_BADGE: Record<string, React.ReactNode> = {
+  draft: <Badge variant="secondary" className="gap-1.5"><Clock className="h-3.5 w-3.5" />Draft</Badge>,
+  pending: <Badge className="gap-1.5 bg-yellow-500 hover:bg-yellow-600"><Clock className="h-3.5 w-3.5" />Pending</Badge>,
+  in_progress: <Badge className="gap-1.5 bg-blue-500 hover:bg-blue-600"><PenLine className="h-3.5 w-3.5" />In Progress</Badge>,
+  signed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Signed</Badge>,
+  completed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Completed</Badge>,
+  rejected: <Badge variant="destructive" className="gap-1.5"><XCircle className="h-3.5 w-3.5" />Rejected</Badge>,
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  uploaded: "Document uploaded",
+  field_placed: "Signing field placed",
+  signed: "Document signed",
+  field_filled: "Field filled",
+  signer_completed: "Signer completed all fields",
+  document_completed: "Document signing completed",
+  sent_for_signing: "Sent for signing",
+  downloaded: "Document downloaded",
+};
 
 export default function DocumentDetail() {
   const [, params] = useRoute("/documents/:id");
   const docId = parseInt(params?.id || "0", 10);
-  
-  const { data: doc, isLoading } = useGetDocument(docId);
-  const { data: savedSignatures } = useListSignatures();
-  
-  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const { toast } = useToast();
-  
-  const updateDoc = useUpdateDocument();
-  const signDoc = useSignDocument();
 
-  const [showSignDialog, setShowSignDialog] = useState(false);
+  const [doc, setDoc] = useState<DocDetail | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
-  const handleReject = () => {
-    if (!confirm("Are you sure you want to reject this document?")) return;
-    
-    updateDoc.mutate({ id: docId, data: { status: "rejected" } }, {
-      onSuccess: () => {
-        toast({ title: "Document rejected" });
-        queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(docId) });
-      },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to reject document.", variant: "destructive" });
+  useEffect(() => {
+    loadDocument();
+  }, [docId]);
+
+  async function loadDocument() {
+    try {
+      const [docRes, auditRes] = await Promise.all([
+        fetch(`/api/documents/${docId}`, { credentials: "include" }),
+        fetch(`/api/documents/${docId}/audit`, { credentials: "include" }),
+      ]);
+
+      if (!docRes.ok) { setLocation("/documents"); return; }
+
+      const docData: DocDetail = await docRes.json();
+      const auditData: AuditEntry[] = auditRes.ok ? await auditRes.json() : [];
+
+      setDoc(docData);
+      setAuditLog(auditData);
+
+      if (docData.filePath) {
+        renderFirstPage(`/api/documents/${docId}/file`);
       }
-    });
-  };
+    } catch {
+      toast({ variant: "destructive", title: "Error loading document" });
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const handleSign = (signatureData: string, type: 'drawn' | 'typed' | 'uploaded') => {
-    signDoc.mutate({ 
-      id: docId, 
-      data: { signatureData } 
-    }, {
-      onSuccess: () => {
-        toast({ title: "Document signed successfully!" });
-        setShowSignDialog(false);
-        queryClient.invalidateQueries({ queryKey: getGetDocumentQueryKey(docId) });
-      },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to sign document.", variant: "destructive" });
-      }
-    });
-  };
+  async function renderFirstPage(url: string) {
+    try {
+      const pdf = await pdfjsLib.getDocument({ url, withCredentials: true }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const renderCtx = canvas.getContext("2d")!; await page.render({ canvasContext: renderCtx, viewport, canvas }).promise;
+      setPdfPreview(canvas.toDataURL("image/png"));
+    } catch {
+      // preview failed, ignore
+    }
+  }
 
-  if (isLoading) {
+  async function downloadDoc(mode: "doc" | "coc" | "merged") {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/download?mode=${mode}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = mode === "coc" ? `COC_${doc?.fileName}` : `Signed_${doc?.fileName}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ variant: "destructive", title: "Download failed" });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="p-8 max-w-5xl mx-auto space-y-6">
+      <div className="p-6 max-w-5xl mx-auto space-y-4">
         <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-12 w-3/4" />
+        <Skeleton className="h-10 w-2/3" />
         <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 space-y-6">
-            <Skeleton className="h-[600px] w-full" />
-          </div>
-          <Skeleton className="h-[400px] w-full" />
+          <Skeleton className="col-span-2 h-96" />
+          <Skeleton className="h-72" />
         </div>
       </div>
     );
@@ -81,155 +175,196 @@ export default function DocumentDetail() {
 
   if (!doc) {
     return (
-      <div className="p-8 max-w-5xl mx-auto text-center py-20">
-        <AlertCircle className="h-16 w-16 mx-auto text-muted-foreground opacity-30 mb-4" />
-        <h2 className="text-2xl font-bold">Document not found</h2>
-        <p className="text-muted-foreground mt-2">The document you're looking for doesn't exist or you don't have access.</p>
-        <Button asChild className="mt-6">
-          <Link href="/documents">Back to Documents</Link>
+      <div className="p-8 text-center py-20">
+        <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
+        <h2 className="text-xl font-bold">Document not found</h2>
+        <Button className="mt-4" onClick={() => setLocation("/documents")}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back
         </Button>
       </div>
     );
   }
 
+  const isOwner = doc.uploadedById === user?.id;
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const mySigner = doc.signers.find((s) => s.email === user?.email);
+  const canEdit = (isOwner || isAdmin) && doc.status === "draft";
+  const canSign = !!mySigner && mySigner.status !== "completed" && doc.status === "in_progress";
+  const canDownload = (isOwner || isAdmin) && (doc.status === "completed" || doc.status === "signed");
+  const myFields = doc.fields.filter((f) => f.signerId === mySigner?.id);
+  const myUnfilledFields = myFields.filter((f) => !f.filledImage);
+
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground -ml-2">
-        <Link href="/documents"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Documents</Link>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <Button variant="ghost" size="sm" onClick={() => setLocation("/documents")} className="-ml-2">
+        <ArrowLeft className="h-4 w-4 mr-1" /> Back to Documents
       </Button>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            {doc.title}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {doc.fileName} • {formatBytes(doc.fileSize)} • Added {formatDate(doc.createdAt)}
+          <h1 className="text-2xl font-bold">{doc.title}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {doc.fileName} · {formatBytes(doc.fileSize)} · Added {formatDate(doc.createdAt)}
           </p>
         </div>
-        <div>
-          {doc.status === "pending" && (
-            <Badge variant="outline" className="text-base px-4 py-1.5 bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900/50 gap-2">
-              <Clock className="h-4 w-4" /> Pending Signature
-            </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          {STATUS_BADGE[doc.status] ?? <Badge variant="secondary">{doc.status}</Badge>}
+
+          {canEdit && (
+            <Button size="sm" variant="outline" onClick={() => setLocation(`/documents/${docId}/editor`)}>
+              <Edit2 className="h-4 w-4 mr-1.5" /> Edit Fields
+            </Button>
           )}
-          {doc.status === "signed" && (
-            <Badge variant="outline" className="text-base px-4 py-1.5 bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-2">
-              <CheckCircle className="h-4 w-4" /> Signed on {formatDate(doc.signedAt)}
-            </Badge>
+
+          {canSign && (
+            <Button size="sm" onClick={() => setLocation(`/documents/${docId}/sign`)}>
+              <PenLine className="h-4 w-4 mr-1.5" />
+              Sign Now {myUnfilledFields.length > 0 ? `(${myUnfilledFields.length} left)` : ""}
+            </Button>
           )}
-          {doc.status === "rejected" && (
-            <Badge variant="outline" className="text-base px-4 py-1.5 bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50 gap-2">
-              <XCircle className="h-4 w-4" /> Rejected
-            </Badge>
+
+          {canDownload && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={downloading}>
+                  {downloading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Download className="h-4 w-4 mr-1.5" />}
+                  Download <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => downloadDoc("doc")}>
+                  <FileText className="h-4 w-4 mr-2" /> Signed PDF only
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadDoc("coc")}>
+                  <ClipboardList className="h-4 w-4 mr-2" /> Certificate of Completion (COC)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadDoc("merged")}>
+                  <Download className="h-4 w-4 mr-2" /> Signed PDF + COC (merged)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
+
+      {doc.description && (
+        <p className="text-sm text-muted-foreground border-l-2 border-border pl-3">{doc.description}</p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="col-span-1 lg:col-span-2 space-y-6">
-          <Card className="border-border shadow-sm min-h-[600px] flex flex-col">
-            <CardHeader className="border-b border-border bg-secondary/30">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" /> Document Preview
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="border-b pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" /> Document Preview
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 p-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900/50 overflow-hidden relative">
-              {/* Fake document preview for visual aesthetics */}
-              <div className="bg-white dark:bg-slate-50 border shadow-md w-full max-w-[600px] h-[800px] my-8 p-12 flex flex-col pointer-events-none transform scale-90 origin-top">
-                <div className="h-8 w-1/3 bg-gray-200 dark:bg-gray-300 rounded mb-8"></div>
-                <div className="space-y-4 flex-1">
-                  <div className="h-4 w-full bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-full bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-11/12 bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-full bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-9/12 bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-full bg-gray-100 dark:bg-gray-200 rounded mt-8"></div>
-                  <div className="h-4 w-full bg-gray-100 dark:bg-gray-200 rounded"></div>
-                  <div className="h-4 w-10/12 bg-gray-100 dark:bg-gray-200 rounded"></div>
+            <CardContent className="p-4 flex justify-center bg-muted/30 min-h-64">
+              {pdfPreview ? (
+                <img src={pdfPreview} alt="PDF preview" className="max-w-full shadow-md border" />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
+                  <FileText className="h-10 w-10 opacity-30" />
+                  <p className="text-sm">No preview available</p>
                 </div>
-                
-                <div className="mt-16 flex justify-between items-end border-t-2 border-gray-200 dark:border-gray-300 pt-8">
-                  <div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-1">Company Representative</div>
-                    <div className="h-12 w-48 border-b-2 border-dashed border-gray-300 dark:border-gray-400"></div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-1">Signer ({doc.signerName})</div>
-                    <div className="h-20 w-64 border-b-2 border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center relative">
-                      {doc.signatureData && (
-                        <img 
-                          src={doc.signatureData} 
-                          alt="Signature" 
-                          className="absolute inset-0 w-full h-full object-contain p-2 mix-blend-multiply dark:mix-blend-normal dark:invert" 
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
+
+          {auditLog.length > 0 && (
+            <Card>
+              <CardHeader className="border-b pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-primary" /> Audit Trail / Chain of Custody
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {auditLog.map((entry) => (
+                    <div key={entry.id} className="px-4 py-3 flex items-start gap-3">
+                      <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{EVENT_LABELS[entry.eventType] ?? entry.eventType}</p>
+                        <p className="text-xs text-muted-foreground">{entry.actorName} · {entry.actorEmail}</p>
+                        {entry.details && Object.keys(entry.details).length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {Object.entries(entry.details).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatDate(entry.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        <div className="space-y-6">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">Information</CardTitle>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="border-b pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" /> Signers ({doc.signers.length})
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="grid grid-cols-3 gap-2 border-b border-border pb-3">
-                <span className="text-muted-foreground">Signer</span>
-                <span className="col-span-2 font-medium">{doc.signerName}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 border-b border-border pb-3">
-                <span className="text-muted-foreground">Email</span>
-                <span className="col-span-2 font-medium break-all">{doc.signerEmail}</span>
-              </div>
-              {doc.description && (
-                <div className="grid grid-cols-3 gap-2 border-b border-border pb-3">
-                  <span className="text-muted-foreground">Note</span>
-                  <span className="col-span-2">{doc.description}</span>
-                </div>
-              )}
-              <div className="grid grid-cols-3 gap-2 border-b border-border pb-3">
-                <span className="text-muted-foreground">Status</span>
-                <span className="col-span-2 capitalize">{doc.status}</span>
-              </div>
-              {doc.signedAt && (
-                <div className="grid grid-cols-3 gap-2 pb-3">
-                  <span className="text-muted-foreground">Signed On</span>
-                  <span className="col-span-2">{formatDate(doc.signedAt)}</span>
+            <CardContent className="p-0">
+              {doc.signers.length === 0 ? (
+                <p className="text-sm text-muted-foreground px-4 py-4 italic">No signers assigned yet</p>
+              ) : (
+                <div className="divide-y">
+                  {doc.signers.map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="h-3 w-3 rounded-full shrink-0" style={{ background: s.color }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{s.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                        {s.completedAt && (
+                          <p className="text-xs text-green-600">{formatDate(s.completedAt)}</p>
+                        )}
+                      </div>
+                      <Badge variant={s.status === "completed" ? "default" : "secondary"} className="text-xs">
+                        {s.status === "completed" ? "Signed" : "Pending"}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
-            {doc.status === "pending" && (
-              <CardFooter className="flex flex-col gap-3 pt-2">
-                <Button className="w-full text-lg h-12" onClick={() => setShowSignDialog(true)}>
-                  Sign Document
-                </Button>
-                <Button variant="outline" className="w-full text-destructive border-destructive/30 hover:bg-destructive/10" onClick={handleReject}>
-                  Reject
-                </Button>
-              </CardFooter>
-            )}
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b pb-3">
+              <CardTitle className="text-base">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 text-sm space-y-3">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <span className="capitalize font-medium">{doc.status.replace("_", " ")}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fields</span>
+                <span className="font-medium">{doc.fields.length} placed</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Filled</span>
+                <span className="font-medium">{doc.fields.filter((f) => f.filledImage).length}/{doc.fields.length}</span>
+              </div>
+              {doc.signedAt && (
+                <>
+                  <Separator />
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Completed</span>
+                    <span className="font-medium">{formatDate(doc.signedAt)}</span>
+                  </div>
+                </>
+              )}
+            </CardContent>
           </Card>
         </div>
       </div>
-
-      <Dialog open={showSignDialog} onOpenChange={setShowSignDialog}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Sign Document</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <SignaturePad 
-              onSave={handleSign} 
-              onCancel={() => setShowSignDialog(false)} 
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

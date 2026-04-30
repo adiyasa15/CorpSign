@@ -64,9 +64,9 @@ export default function Signatures() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg font-semibold flex items-center justify-between">
                   {sig.name}
-                  {sig.type === 'drawn' && <PenTool className="h-4 w-4 text-muted-foreground" title="Drawn" />}
-                  {sig.type === 'typed' && <Type className="h-4 w-4 text-muted-foreground" title="Typed" />}
-                  {sig.type === 'uploaded' && <Upload className="h-4 w-4 text-muted-foreground" title="Uploaded" />}
+                  {sig.type === 'drawn' && <PenTool className="h-4 w-4 text-muted-foreground" />}
+                  {sig.type === 'typed' && <Type className="h-4 w-4 text-muted-foreground" />}
+                  {sig.type === 'uploaded' && <Upload className="h-4 w-4 text-muted-foreground" />}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col items-center justify-center p-6 bg-secondary/20 m-6 rounded-md border border-border/50 relative overflow-hidden h-32">
