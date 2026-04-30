@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   ArrowLeft, PenLine, Fingerprint, Stamp, Plus, Trash2,
-  Send, Loader2, X, UserPlus, ChevronRight,
+  Send, Loader2, X, UserPlus, GripVertical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -44,6 +44,12 @@ interface PageImg {
   height: number;
 }
 
+interface UserSuggestion {
+  id: number;
+  name: string;
+  email: string;
+}
+
 const FIELD_DEFAULTS: Record<string, { width: number; height: number }> = {
   signature: { width: 18, height: 6 },
   initial: { width: 10, height: 6 },
@@ -55,6 +61,11 @@ const FIELD_LABELS: Record<string, string> = {
   initial: "Initial",
   stamp: "Stamp",
 };
+
+type InteractState =
+  | { type: "drag"; fieldId: number; pageIndex: number; startMouseX: number; startMouseY: number; startFieldX: number; startFieldY: number }
+  | { type: "resize"; fieldId: number; pageIndex: number; startMouseX: number; startMouseY: number; startW: number; startH: number }
+  | null;
 
 export default function DocumentEditor() {
   const { id } = useParams<{ id: string }>();
@@ -75,11 +86,22 @@ export default function DocumentEditor() {
   const [addSignerOpen, setAddSignerOpen] = useState(false);
   const [signerName, setSignerName] = useState("");
   const [signerEmail, setSignerEmail] = useState("");
+  const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsFor, setSuggestionsFor] = useState<"name" | "email" | null>(null);
   const [addingSign, setAddingSign] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [dragSignerId, setDragSignerId] = useState<number | null>(null);
+  const [dropOverIdx, setDropOverIdx] = useState<number | null>(null);
+
+  const [interactState, setInteractState] = useState<InteractState>(null);
+  const interactRef = useRef<InteractState>(null);
+  const pendingSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [sending, setSending] = useState(false);
 
-  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     loadDocument();
@@ -106,7 +128,7 @@ export default function DocumentEditor() {
       if (docData.filePath) {
         await renderPDF(`/api/documents/${docId}/file`);
       }
-    } catch (e) {
+    } catch {
       toast({ variant: "destructive", title: "Error", description: "Failed to load document" });
     } finally {
       setLoading(false);
@@ -123,7 +145,7 @@ export default function DocumentEditor() {
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext("2d")!;
-      await page.render({ canvasContext: ctx!, viewport, canvas }).promise;
+      await page.render({ canvasContext: ctx, viewport, canvas }).promise;
       rendered.push({ dataUrl: canvas.toDataURL("image/png"), width: viewport.width, height: viewport.height });
     }
     setPages(rendered);
@@ -131,6 +153,7 @@ export default function DocumentEditor() {
 
   const handlePageClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>, pageIndex: number) => {
     if (!activeTool || !activeSignerId) return;
+    if (interactRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
     const yPct = ((e.clientY - rect.top) / rect.height) * 100;
@@ -163,6 +186,114 @@ export default function DocumentEditor() {
     }
   };
 
+  const saveFieldGeometry = useCallback((fieldId: number, x: number, y: number, width: number, height: number) => {
+    if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
+    pendingSaveRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/documents/${docId}/fields/${fieldId}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x, y, width, height }),
+        });
+      } catch {
+        toast({ variant: "destructive", title: "Failed to save field position" });
+      }
+    }, 400);
+  }, [docId]);
+
+  const startDrag = useCallback((e: React.PointerEvent, field: Field) => {
+    if (activeTool) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const state: InteractState = {
+      type: "drag",
+      fieldId: field.id,
+      pageIndex: field.page,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startFieldX: field.x,
+      startFieldY: field.y,
+    };
+    interactRef.current = state;
+    setInteractState(state);
+  }, [activeTool]);
+
+  const startResize = useCallback((e: React.PointerEvent, field: Field) => {
+    if (activeTool) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const state: InteractState = {
+      type: "resize",
+      fieldId: field.id,
+      pageIndex: field.page,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startW: field.width,
+      startH: field.height,
+    };
+    interactRef.current = state;
+    setInteractState(state);
+  }, [activeTool]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>, pageIndex: number) => {
+    const state = interactRef.current;
+    if (!state || state.pageIndex !== pageIndex) return;
+
+    const container = pageContainerRefs.current[pageIndex];
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+
+    const dxPct = ((e.clientX - state.startMouseX) / rect.width) * 100;
+    const dyPct = ((e.clientY - state.startMouseY) / rect.height) * 100;
+
+    setFields((prev) => prev.map((f) => {
+      if (f.id !== state.fieldId) return f;
+      if (state.type === "drag") {
+        const newX = Math.max(0, Math.min(state.startFieldX + dxPct, 100 - f.width));
+        const newY = Math.max(0, Math.min(state.startFieldY + dyPct, 100 - f.height));
+        return { ...f, x: newX, y: newY };
+      } else {
+        const newW = Math.max(5, Math.min(state.startW + dxPct, 100 - f.x));
+        const newH = Math.max(3, Math.min(state.startH + dyPct, 100 - f.y));
+        return { ...f, width: newW, height: newH };
+      }
+    }));
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    const state = interactRef.current;
+    if (!state) return;
+    interactRef.current = null;
+    setInteractState(null);
+
+    setFields((prev) => {
+      const field = prev.find((f) => f.id === state.fieldId);
+      if (field) {
+        saveFieldGeometry(field.id, field.x, field.y, field.width, field.height);
+      }
+      return prev;
+    });
+  }, [saveFieldGeometry]);
+
+  const searchUsers = useCallback((query: string, field: "name" | "email") => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setSuggestionsFor(field);
+    if (query.trim().length < 1) { setUserSuggestions([]); setSuggestionsOpen(false); return; }
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, { credentials: "include" });
+        if (res.ok) {
+          const users: UserSuggestion[] = await res.json();
+          setUserSuggestions(users);
+          setSuggestionsOpen(users.length > 0);
+        }
+      } catch {
+        setUserSuggestions([]);
+      }
+    }, 250);
+  }, []);
+
   const addSigner = async () => {
     if (!signerName.trim() || !signerEmail.trim()) return;
     setAddingSign(true);
@@ -177,6 +308,7 @@ export default function DocumentEditor() {
       setSigners((prev) => [...prev, signer]);
       setActiveSignerId(signer.id);
       setSignerName(""); setSignerEmail("");
+      setUserSuggestions([]); setSuggestionsOpen(false);
       setAddSignerOpen(false);
     } catch {
       toast({ variant: "destructive", title: "Failed to add signer" });
@@ -193,6 +325,42 @@ export default function DocumentEditor() {
       if (activeSignerId === signerId) setActiveSignerId(null);
     } catch {
       toast({ variant: "destructive", title: "Failed to remove signer" });
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, signerId: number) => {
+    setDragSignerId(signerId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropOverIdx(idx);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    if (dragSignerId === null) return;
+    const from = signers.findIndex((s) => s.id === dragSignerId);
+    if (from === dropIdx || from === -1) { setDragSignerId(null); setDropOverIdx(null); return; }
+
+    const reordered = [...signers];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(dropIdx, 0, moved);
+    const updated = reordered.map((s, i) => ({ ...s, signerOrder: i }));
+    setSigners(updated);
+    setDragSignerId(null);
+    setDropOverIdx(null);
+
+    try {
+      await fetch(`/api/documents/${docId}/signers/reorder`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: updated.map((s) => s.id) }),
+      });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save signer order" });
     }
   };
 
@@ -224,9 +392,10 @@ export default function DocumentEditor() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-muted/20">
+      {/* Sidebar */}
       <div className="w-72 bg-background border-r flex flex-col shrink-0">
         <div className="p-4 border-b">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/documents")} className="mb-3 -ml-2">
+          <Button variant="ghost" size="sm" onClick={() => setLocation(`/documents/${docId}`)} className="mb-3 -ml-2">
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
           <h2 className="font-semibold text-sm truncate">{doc?.title}</h2>
@@ -235,6 +404,7 @@ export default function DocumentEditor() {
 
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-5">
+            {/* Signers */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Signers</span>
@@ -246,22 +416,28 @@ export default function DocumentEditor() {
                 <p className="text-xs text-muted-foreground italic">No signers added yet</p>
               )}
               <div className="space-y-1.5">
-                {signers.map((s) => (
+                {signers.map((s, idx) => (
                   <div
                     key={s.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, s.id)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    onDragEnd={() => { setDragSignerId(null); setDropOverIdx(null); }}
                     onClick={() => setActiveSignerId(s.id)}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all select-none ${
                       activeSignerId === s.id ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted"
-                    }`}
+                    } ${dropOverIdx === idx && dragSignerId !== s.id ? "ring-2 ring-primary/60 bg-primary/5" : ""}`}
                   >
+                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-grab" />
                     <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{s.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{s.email}</p>
                     </div>
-                    {activeSignerId === s.id && <ChevronRight className="h-3.5 w-3.5 text-primary" />}
+                    <span className="text-[10px] text-muted-foreground shrink-0">#{idx + 1}</span>
                     <Button
-                      variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:text-destructive"
+                      variant="ghost" size="icon" className="h-5 w-5 hover:text-destructive shrink-0"
                       onClick={(e) => { e.stopPropagation(); removeSigner(s.id); }}
                     >
                       <X className="h-3 w-3" />
@@ -273,6 +449,7 @@ export default function DocumentEditor() {
 
             <Separator />
 
+            {/* Field tools */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add Fields</p>
               {!activeSignerId ? (
@@ -298,8 +475,11 @@ export default function DocumentEditor() {
                   ))}
                   {activeTool && (
                     <p className="text-xs text-primary mt-1">
-                      Click anywhere on the document to place a {activeTool} field for <strong>{activeSigner?.name}</strong>
+                      Click the document to place a {activeTool} for <strong>{activeSigner?.name}</strong>
                     </p>
+                  )}
+                  {!activeTool && fields.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">Drag fields to move · drag corner to resize</p>
                   )}
                 </div>
               )}
@@ -307,6 +487,7 @@ export default function DocumentEditor() {
 
             <Separator />
 
+            {/* Fields list */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                 Fields ({fields.length})
@@ -341,6 +522,7 @@ export default function DocumentEditor() {
         </div>
       </div>
 
+      {/* PDF canvas */}
       <ScrollArea className="flex-1">
         <div className="flex flex-col items-center gap-6 py-6 px-4">
           {pages.length === 0 && (
@@ -349,47 +531,82 @@ export default function DocumentEditor() {
             </div>
           )}
           {pages.map((page, pageIndex) => (
-            <div key={pageIndex} className="relative shadow-xl border border-border bg-white" style={{ width: page.width, height: page.height }}>
-              <img src={page.dataUrl} alt={`Page ${pageIndex + 1}`} style={{ width: page.width, height: page.height, display: "block" }} draggable={false} />
+            <div
+              key={pageIndex}
+              className="relative shadow-xl border border-border bg-white"
+              style={{ width: page.width, height: page.height }}
+            >
+              <img
+                src={page.dataUrl}
+                alt={`Page ${pageIndex + 1}`}
+                style={{ width: page.width, height: page.height, display: "block" }}
+                draggable={false}
+              />
+
+              {/* Interaction overlay */}
               <div
-                ref={(el) => { pageRefs.current[pageIndex] = el; }}
+                ref={(el) => { pageContainerRefs.current[pageIndex] = el; }}
                 className={`absolute inset-0 ${activeTool && activeSignerId ? "cursor-crosshair" : ""}`}
                 style={{ width: page.width, height: page.height }}
-                onClick={(e) => handlePageClick(e, pageIndex)}
+                onClick={(e) => { if (!interactRef.current) handlePageClick(e, pageIndex); }}
+                onPointerMove={(e) => handlePointerMove(e, pageIndex)}
+                onPointerUp={handlePointerUp}
               >
                 {fields.filter((f) => f.page === pageIndex).map((field) => {
                   const signer = signers.find((s) => s.id === field.signerId);
                   const color = signer?.color ?? "#2563eb";
+                  const isInteracting = interactState?.fieldId === field.id;
+
                   return (
                     <div
                       key={field.id}
-                      className="absolute group border-2 rounded flex items-center justify-center"
+                      className={`absolute group border-2 rounded flex items-center justify-center ${
+                        activeTool ? "pointer-events-none" : "cursor-move"
+                      } ${isInteracting ? "opacity-90 shadow-lg z-10" : ""}`}
                       style={{
                         left: `${field.x}%`, top: `${field.y}%`,
                         width: `${field.width}%`, height: `${field.height}%`,
                         borderColor: color,
                         background: `${color}18`,
+                        userSelect: "none",
                       }}
+                      onPointerDown={(e) => startDrag(e, field)}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {field.filledImage ? (
-                        <img src={field.filledImage} className="w-full h-full object-contain p-0.5" />
+                        <img src={field.filledImage} className="w-full h-full object-contain p-0.5" draggable={false} />
                       ) : (
-                        <span className="text-[10px] font-semibold px-1 truncate" style={{ color }}>
+                        <span className="text-[10px] font-semibold px-1 truncate pointer-events-none" style={{ color }}>
                           {FIELD_LABELS[field.fieldType] ?? field.fieldType}
                         </span>
                       )}
+
+                      {/* Delete button */}
                       <button
-                        className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-destructive text-white hidden group-hover:flex items-center justify-center shadow-sm"
+                        className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-destructive text-white hidden group-hover:flex items-center justify-center shadow-sm z-20"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); deleteField(field.id); }}
                       >
                         <X className="h-3 w-3" />
                       </button>
+
+                      {/* Resize handle (bottom-right) */}
+                      <div
+                        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-se-resize z-20"
+                        style={{
+                          background: color,
+                          clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
+                          opacity: 0.8,
+                        }}
+                        onPointerDown={(e) => { e.stopPropagation(); startResize(e, field); }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </div>
                   );
                 })}
               </div>
-              <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
+
+              <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded pointer-events-none">
                 Page {pageIndex + 1}
               </div>
             </div>
@@ -397,7 +614,11 @@ export default function DocumentEditor() {
         </div>
       </ScrollArea>
 
-      <Dialog open={addSignerOpen} onOpenChange={setAddSignerOpen}>
+      {/* Add Signer Dialog */}
+      <Dialog open={addSignerOpen} onOpenChange={(open) => {
+        setAddSignerOpen(open);
+        if (!open) { setSignerName(""); setSignerEmail(""); setUserSuggestions([]); setSuggestionsOpen(false); }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -405,13 +626,71 @@ export default function DocumentEditor() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
+            {/* Name with autocomplete */}
+            <div className="space-y-2 relative">
               <Label>Full Name</Label>
-              <Input value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="Jane Smith" />
+              <Input
+                value={signerName}
+                onChange={(e) => { setSignerName(e.target.value); searchUsers(e.target.value, "name"); }}
+                onFocus={() => { setSuggestionsFor("name"); if (userSuggestions.length > 0) setSuggestionsOpen(true); }}
+                onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
+                placeholder="Jane Smith"
+                autoComplete="off"
+              />
+              {suggestionsOpen && suggestionsFor === "name" && userSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg top-full overflow-hidden">
+                  {userSuggestions.map((u) => (
+                    <button
+                      key={u.id}
+                      className="w-full text-left px-3 py-2 hover:bg-muted transition-colors text-sm flex flex-col"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSignerName(u.name);
+                        setSignerEmail(u.email);
+                        setUserSuggestions([]);
+                        setSuggestionsOpen(false);
+                      }}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="text-xs text-muted-foreground">{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
+
+            {/* Email with autocomplete */}
+            <div className="space-y-2 relative">
               <Label>Email Address</Label>
-              <Input type="email" value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} placeholder="jane@example.com" />
+              <Input
+                type="email"
+                value={signerEmail}
+                onChange={(e) => { setSignerEmail(e.target.value); searchUsers(e.target.value, "email"); }}
+                onFocus={() => { setSuggestionsFor("email"); if (userSuggestions.length > 0) setSuggestionsOpen(true); }}
+                onBlur={() => setTimeout(() => setSuggestionsOpen(false), 150)}
+                placeholder="jane@example.com"
+                autoComplete="off"
+              />
+              {suggestionsOpen && suggestionsFor === "email" && userSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg top-full overflow-hidden">
+                  {userSuggestions.map((u) => (
+                    <button
+                      key={u.id}
+                      className="w-full text-left px-3 py-2 hover:bg-muted transition-colors text-sm flex flex-col"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSignerName(u.name);
+                        setSignerEmail(u.email);
+                        setUserSuggestions([]);
+                        setSuggestionsOpen(false);
+                      }}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="text-xs text-muted-foreground">{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

@@ -2,11 +2,30 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, or, ilike, and } from "drizzle-orm";
 import { requireAdminOrSuperAdmin, requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 
 const router = Router();
+
+router.get("/users/search", requireAuth, async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    if (q.length < 1) { res.json([]); return; }
+    const users = await db
+      .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.isActive, true),
+        or(ilike(usersTable.name, `%${q}%`), ilike(usersTable.email, `%${q}%`))
+      ))
+      .limit(10);
+    res.json(users);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 const CreateUserBody = z.object({
   name: z.string().min(1),

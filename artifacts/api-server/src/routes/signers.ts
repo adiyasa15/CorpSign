@@ -86,6 +86,29 @@ router.delete("/documents/:id/signers/:signerId", requireAuth, async (req, res) 
   }
 });
 
+router.patch("/documents/:id/signers/reorder", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const user = req.user!;
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+    if (doc.uploadedById !== user.id && user.role !== "admin" && user.role !== "superadmin") {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    const { order } = req.body as { order: number[] };
+    if (!Array.isArray(order)) { res.status(400).json({ error: "order array required" }); return; }
+    await Promise.all(order.map((signerId, idx) =>
+      db.update(documentSignersTable)
+        .set({ signerOrder: idx })
+        .where(and(eq(documentSignersTable.id, signerId), eq(documentSignersTable.documentId, docId)))
+    ));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/documents/:id/fields", requireAuth, async (req, res) => {
   try {
     const docId = Number(req.params.id);
@@ -126,6 +149,34 @@ router.post("/documents/:id/fields", requireAuth, async (req, res) => {
     }).returning();
 
     res.status(201).json(formatField(field));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/documents/:id/fields/:fieldId", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const fieldId = Number(req.params.fieldId);
+    const user = req.user!;
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+    if (doc.uploadedById !== user.id && user.role !== "admin" && user.role !== "superadmin") {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    const { x, y, width, height } = req.body as { x?: number; y?: number; width?: number; height?: number };
+    const updates: Record<string, number> = {};
+    if (x !== undefined) updates.x = x;
+    if (y !== undefined) updates.y = y;
+    if (width !== undefined) updates.width = width;
+    if (height !== undefined) updates.height = height;
+    if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No updates provided" }); return; }
+    const [updated] = await db.update(documentFieldsTable)
+      .set(updates)
+      .where(and(eq(documentFieldsTable.id, fieldId), eq(documentFieldsTable.documentId, docId)))
+      .returning();
+    res.json(formatField(updated));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

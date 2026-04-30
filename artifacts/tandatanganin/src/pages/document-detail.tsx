@@ -10,8 +10,12 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
-  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2,
+  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -96,6 +100,8 @@ export default function DocumentDetail() {
   const [loading, setLoading] = useState(true);
   const [pdfPreview, setPdfPreview] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -160,6 +166,21 @@ export default function DocumentDetail() {
     }
   }
 
+  async function deleteDocument() {
+    setDeletingDoc(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Delete failed");
+      toast({ title: "Document deleted" });
+      setLocation("/documents");
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete document" });
+    } finally {
+      setDeletingDoc(false);
+      setDeleteOpen(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6 max-w-5xl mx-auto space-y-4">
@@ -211,9 +232,14 @@ export default function DocumentDetail() {
           {STATUS_BADGE[doc.status] ?? <Badge variant="secondary">{doc.status}</Badge>}
 
           {canEdit && (
-            <Button size="sm" variant="outline" onClick={() => setLocation(`/documents/${docId}/editor`)}>
-              <Edit2 className="h-4 w-4 mr-1.5" /> Edit Fields
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => setLocation(`/documents/${docId}/editor`)}>
+                <Edit2 className="h-4 w-4 mr-1.5" /> Edit Fields
+              </Button>
+              <Button size="sm" variant="outline" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+              </Button>
+            </>
           )}
 
           {canSign && (
@@ -365,6 +391,28 @@ export default function DocumentDetail() {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{doc.title}</strong> and all associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={deleteDocument}
+              disabled={deletingDoc}
+            >
+              {deletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Document
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
