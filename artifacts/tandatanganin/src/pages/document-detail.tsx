@@ -218,9 +218,11 @@ export default function DocumentDetail() {
   const isOwner = doc.uploadedById === user?.id;
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const mySigner = doc.signers.find((s) => s.email === user?.email);
+  const isCC = doc.cc?.some((cc) => cc.email === user?.email);
+  const isInvolved = isOwner || isAdmin || !!mySigner || isCC;
   const canEdit = (isOwner || isAdmin) && doc.status === "draft";
   const canSign = !!mySigner && mySigner.status !== "completed" && doc.status === "in_progress";
-  const canDownload = (isOwner || isAdmin) && (doc.status === "completed" || doc.status === "signed");
+  const canDownload = isInvolved && (doc.status === "completed" || doc.status === "signed");
   const myFields = doc.fields.filter((f) => f.signerId === mySigner?.id);
   const myUnfilledFields = myFields.filter((f) => !f.filledImage);
 

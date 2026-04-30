@@ -46,6 +46,47 @@ async function getUploaderEmail(uploadedById: number | null): Promise<string | n
   return u?.email ?? null;
 }
 
+async function isCcUser(docId: number, email: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: documentCcTable.id })
+    .from(documentCcTable)
+    .innerJoin(usersTable, eq(documentCcTable.userId, usersTable.id))
+    .where(and(eq(documentCcTable.documentId, docId), eq(usersTable.email, email)));
+  return rows.length > 0;
+}
+
+async function canAccessDoc(docId: number, user: Express.User): Promise<boolean> {
+  if (canSeeAllDocs(user.role)) return true;
+  if (!user.id) return false;
+  const [doc] = await db.select({ uploadedById: documentsTable.uploadedById }).from(documentsTable).where(eq(documentsTable.id, docId));
+  if (!doc) return false;
+  if (doc.uploadedById === user.id) return true;
+  const signer = await db.select({ id: documentSignersTable.id }).from(documentSignersTable)
+    .where(and(eq(documentSignersTable.documentId, docId), eq(documentSignersTable.email, user.email)));
+  if (signer.length > 0) return true;
+  return isCcUser(docId, user.email);
+}
+
+const geoCache = new Map<string, string>();
+async function lookupGeo(ip: string | null | undefined): Promise<string> {
+  if (!ip) return "—";
+  const clean = ip.replace(/^::ffff:/, "");
+  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$)/.test(clean)) return "Internal / Local";
+  if (geoCache.has(clean)) return geoCache.get(clean)!;
+  try {
+    const res = await fetch(`http://ip-api.com/json/${clean}?fields=status,city,regionName,country`, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json() as { status: string; city?: string; regionName?: string; country?: string };
+    if (data.status === "success") {
+      const loc = [data.city, data.regionName, data.country].filter(Boolean).join(", ");
+      geoCache.set(clean, loc);
+      return loc;
+    }
+  } catch {
+    // geo lookup failed — degrade gracefully
+  }
+  return clean;
+}
+
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -222,15 +263,9 @@ router.get("/documents/:id/file", requireAuth, async (req, res) => {
     }
 
     const user = req.user!;
-    if (!canSeeAllDocs(user.role) && doc.uploadedById !== user.id) {
-      const signer = await db
-        .select()
-        .from(documentSignersTable)
-        .where(and(eq(documentSignersTable.documentId, docId), eq(documentSignersTable.email, user.email)));
-      if (signer.length === 0) {
-        res.status(403).json({ error: "Forbidden" });
-        return;
-      }
+    if (!await canAccessDoc(docId, user)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     const signedPath = path.join(UPLOADS_DIR, `signed_${doc.filePath}`);
@@ -262,15 +297,9 @@ router.get("/documents/:id/download", requireAuth, async (req, res) => {
     }
 
     const user = req.user!;
-    if (!canSeeAllDocs(user.role) && doc.uploadedById !== user.id) {
-      const signer = await db
-        .select()
-        .from(documentSignersTable)
-        .where(and(eq(documentSignersTable.documentId, docId), eq(documentSignersTable.email, user.email)));
-      if (signer.length === 0) {
-        res.status(403).json({ error: "Forbidden" });
-        return;
-      }
+    if (!await canAccessDoc(docId, user)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     await logAudit(doc.id, user.id, user.name, user.email, req.ip, "downloaded", { mode });
@@ -330,7 +359,7 @@ router.get("/documents/:id/audit", requireAuth, async (req, res) => {
     }
 
     const user = req.user!;
-    if (!canSeeAllDocs(user.role) && doc.uploadedById !== user.id) {
+    if (!await canAccessDoc(docId, user)) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
@@ -569,57 +598,156 @@ async function generateSignedPDF(docId: number, filePath: string): Promise<strin
   return signedFileName;
 }
 
+const EVENT_LABELS_PDF: Record<string, string> = {
+  uploaded: "Uploaded",
+  field_placed: "Field placed",
+  signed: "Signed",
+  field_filled: "Field filled",
+  signer_completed: "Signer completed",
+  document_completed: "Document completed",
+  sent_for_signing: "Sent for signing",
+  downloaded: "Downloaded",
+  voided: "Voided",
+  rejected: "Rejected",
+};
+
 async function generateCOC(doc: typeof documentsTable.$inferSelect, docId: number): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const page = pdfDoc.addPage([595, 842]);
-  const { height } = page.getSize();
-  let y = height - 60;
+  const PAGE_W = 595;
+  const PAGE_H = 842;
+  const MARGIN = 50;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+  const BOTTOM_MARGIN = 70;
 
-  const draw = (text: string, size: number, bold = false, color = rgb(0, 0, 0)) => {
-    page.drawText(text, { x: 50, y, size, font: bold ? boldFont : font, color });
+  let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+  let y = PAGE_H - 50;
+
+  function newPage() {
+    page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    y = PAGE_H - 50;
+    // Page header on continuation pages
+    page.drawText("CHAIN OF CUSTODY — continued", { x: MARGIN, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+    y -= 20;
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+    y -= 14;
+  }
+
+  function checkPage(needed = 14) {
+    if (y < BOTTOM_MARGIN + needed) newPage();
+  }
+
+  function drawText(text: string, size: number, bold = false, color = rgb(0.1, 0.1, 0.1), x = MARGIN) {
+    checkPage(size + 8);
+    page.drawText(text.slice(0, 110), { x, y, size, font: bold ? boldFont : font, color });
     y -= size + 6;
-  };
+  }
 
-  draw("CERTIFICATE OF COMPLETION", 18, true, rgb(0.1, 0.2, 0.6));
-  draw("Chain of Custody / Audit Trail", 12, false, rgb(0.4, 0.4, 0.4));
-  y -= 10;
-
-  page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-  y -= 20;
-
-  draw(`Document: ${doc.title}`, 11, true);
-  draw(`File: ${doc.fileName}`, 10);
-  draw(`Status: ${doc.status.toUpperCase()}`, 10);
-  draw(`Created: ${doc.createdAt.toISOString()}`, 10);
-  y -= 10;
-
-  const signers = await db.select().from(documentSignersTable).where(eq(documentSignersTable.documentId, docId)).orderBy(documentSignersTable.signerOrder);
-  if (signers.length > 0) {
-    draw("Signers:", 11, true);
-    for (const s of signers) {
-      draw(`  ${s.signerOrder + 1}. ${s.name} <${s.email}> — ${s.status.toUpperCase()}${s.completedAt ? ` (${s.completedAt.toISOString()})` : ""}`, 10);
-    }
+  function hRule(alpha = 0.8) {
+    checkPage(10);
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: rgb(alpha, alpha, alpha) });
     y -= 10;
   }
 
-  const auditLogs = await db.select().from(documentAuditTable).where(eq(documentAuditTable.documentId, docId)).orderBy(documentAuditTable.createdAt);
+  // — Header —
+  page.drawRectangle({ x: 0, y: PAGE_H - 85, width: PAGE_W, height: 85, color: rgb(0.07, 0.15, 0.45) });
+  page.drawText("CERTIFICATE OF COMPLETION", { x: MARGIN, y: PAGE_H - 38, size: 18, font: boldFont, color: rgb(1, 1, 1) });
+  page.drawText("Chain of Custody  /  Audit Trail", { x: MARGIN, y: PAGE_H - 58, size: 10, font, color: rgb(0.75, 0.82, 1) });
+  page.drawText("Tandatanganin — Digital Signature Platform", { x: MARGIN, y: PAGE_H - 74, size: 8, font, color: rgb(0.6, 0.68, 0.9) });
+  y = PAGE_H - 105;
 
-  draw("Audit Trail:", 11, true);
-  y -= 5;
+  // — Document details —
+  drawText("DOCUMENT INFORMATION", 9, true, rgb(0.4, 0.4, 0.4));
+  hRule(0.88);
+  drawText(`Title:    ${doc.title}`, 10, false);
+  drawText(`File:     ${doc.fileName}`, 10, false);
+  drawText(`Status:   ${doc.status.toUpperCase().replace("_", " ")}`, 10, false);
+  drawText(`Created:  ${doc.createdAt.toISOString().replace("T", " ").slice(0, 19)} UTC`, 10, false);
+  y -= 8;
 
-  for (const log of auditLogs) {
-    const line = `${log.createdAt.toISOString().replace("T", " ").slice(0, 19)}  ${log.actorName} (${log.actorEmail})  →  ${log.eventType}`;
-    if (y < 80) break;
-    draw(line, 9, false, rgb(0.2, 0.2, 0.2));
+  // — Signers —
+  const signers = await db.select().from(documentSignersTable).where(eq(documentSignersTable.documentId, docId)).orderBy(documentSignersTable.signerOrder);
+  if (signers.length > 0) {
+    drawText("SIGNERS", 9, true, rgb(0.4, 0.4, 0.4));
+    hRule(0.88);
+    for (const s of signers) {
+      const statusLabel = s.status === "completed" ? "[SIGNED]" : "[PENDING]";
+      const completedLabel = s.completedAt
+        ? `  (completed ${s.completedAt.toISOString().replace("T", " ").slice(0, 19)} UTC)`
+        : "";
+      drawText(`${s.signerOrder + 1}.  ${s.name}  <${s.email}>  —  ${statusLabel}${completedLabel}`, 9, false);
+    }
+    y -= 8;
   }
 
-  y -= 20;
-  page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-  y -= 15;
-  draw("This document was processed by Tandatanganin — Digital Signature Platform", 8, false, rgb(0.5, 0.5, 0.5));
+  // — Audit Trail —
+  const auditLogs = await db.select().from(documentAuditTable)
+    .where(eq(documentAuditTable.documentId, docId))
+    .orderBy(documentAuditTable.createdAt);
+
+  // Deduplicate IPs and fetch geo in parallel
+  const uniqueIps = [...new Set(auditLogs.map((l) => l.actorIp).filter(Boolean))];
+  await Promise.all(uniqueIps.map((ip) => lookupGeo(ip)));
+
+  checkPage(40);
+  drawText("AUDIT TRAIL", 9, true, rgb(0.4, 0.4, 0.4));
+  hRule(0.88);
+
+  // Column headers
+  const COL_DATE = MARGIN;
+  const COL_TIME = MARGIN + 62;
+  const COL_EVENT = MARGIN + 118;
+  const COL_NAME = MARGIN + 210;
+  const COL_EMAIL = MARGIN + 290;
+  const COL_GEO = MARGIN + 390;
+
+  checkPage(18);
+  const headerY = y;
+  page.drawRectangle({ x: MARGIN - 2, y: headerY - 2, width: CONTENT_W + 4, height: 14, color: rgb(0.93, 0.95, 0.98) });
+  const colHeaders: [string, number][] = [
+    ["DATE", COL_DATE], ["TIME (UTC)", COL_TIME], ["EVENT", COL_EVENT],
+    ["NAME", COL_NAME], ["EMAIL", COL_EMAIL], ["LOCATION", COL_GEO],
+  ];
+  for (const [label, x] of colHeaders) {
+    page.drawText(label, { x, y: headerY, size: 7, font: boldFont, color: rgb(0.3, 0.3, 0.5) });
+  }
+  y -= 16;
+
+  // Rows
+  for (let i = 0; i < auditLogs.length; i++) {
+    const log = auditLogs[i];
+    checkPage(14);
+    const rowY = y;
+
+    if (i % 2 === 0) {
+      page.drawRectangle({ x: MARGIN - 2, y: rowY - 3, width: CONTENT_W + 4, height: 13, color: rgb(0.97, 0.97, 0.99) });
+    }
+
+    const dt = log.createdAt;
+    const dateStr = dt.toISOString().slice(0, 10);
+    const timeStr = dt.toISOString().slice(11, 19);
+    const eventStr = (EVENT_LABELS_PDF[log.eventType] ?? log.eventType).slice(0, 18);
+    const nameStr = (log.actorName ?? "").slice(0, 18);
+    const emailStr = (log.actorEmail ?? "").slice(0, 24);
+    const geoStr = (await lookupGeo(log.actorIp)).slice(0, 28);
+
+    const rowData: [string, number][] = [
+      [dateStr, COL_DATE], [timeStr, COL_TIME], [eventStr, COL_EVENT],
+      [nameStr, COL_NAME], [emailStr, COL_EMAIL], [geoStr, COL_GEO],
+    ];
+    for (const [text, x] of rowData) {
+      page.drawText(text, { x, y: rowY, size: 7.5, font, color: rgb(0.15, 0.15, 0.15) });
+    }
+    y -= 13;
+  }
+
+  // — Footer —
+  y -= 16;
+  hRule(0.82);
+  drawText(`Generated: ${new Date().toISOString().replace("T", " ").slice(0, 19)} UTC   ·   Total events: ${auditLogs.length}`, 7.5, false, rgb(0.5, 0.5, 0.5));
+  drawText("This certificate was automatically generated by Tandatanganin — Digital Signature Platform", 7.5, false, rgb(0.5, 0.5, 0.5));
 
   return pdfDoc.save();
 }
