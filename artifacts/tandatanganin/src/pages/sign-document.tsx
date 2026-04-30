@@ -195,7 +195,8 @@ export default function SignDocument() {
     }
 
     const fieldTpls = templates.filter((t) => t.templateType === field.fieldType);
-    setSignDialogTab(fieldTpls.length > 0 ? "saved" : "draw");
+    const isStamp = field.fieldType === "stamp";
+    setSignDialogTab(fieldTpls.length > 0 ? "saved" : isStamp ? "upload" : "draw");
     setSdUploadImage(null);
     setSdSaveToProfile(true);
     setActiveField(field);
@@ -507,14 +508,17 @@ export default function SignDocument() {
 
           {(() => {
             const fieldTpls = templates.filter((t) => t.templateType === activeField?.fieldType);
+            const isStampField = activeField?.fieldType === "stamp";
             return (
               <Tabs value={signDialogTab} onValueChange={(v) => setSignDialogTab(v as typeof signDialogTab)}>
                 <TabsList className="w-full">
                   {fieldTpls.length > 0 && (
                     <TabsTrigger value="saved" className="flex-1">Saved</TabsTrigger>
                   )}
-                  <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
-                  <TabsTrigger value="upload" className="flex-1">Upload</TabsTrigger>
+                  {!isStampField && (
+                    <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
+                  )}
+                  <TabsTrigger value="upload" className="flex-1">{isStampField ? "Upload Stamp" : "Upload"}</TabsTrigger>
                 </TabsList>
 
                 {fieldTpls.length > 0 && (

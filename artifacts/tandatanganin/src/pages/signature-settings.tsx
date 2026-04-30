@@ -69,7 +69,7 @@ export default function SignatureSettings() {
     setAddType(type);
     setAddName("");
     setAddDefault(false);
-    setAddTab("draw");
+    setAddTab(type === "stamp" ? "upload" : "draw");
     setAddUploadImage(null);
     setAddOpen(true);
     setTimeout(() => sigPadRef.current?.clear(), 50);
@@ -251,9 +251,22 @@ export default function SignatureSettings() {
             {/* Type dropdown */}
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={addType} onValueChange={setAddType}>
+              <Select
+                value={addType}
+                onValueChange={(v) => {
+                  setAddType(v);
+                  if (v === "stamp") { setAddTab("upload"); setAddUploadImage(null); }
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    <span className="flex items-center gap-2">
+                      {addType === "signature" && <PenLine className="h-4 w-4" />}
+                      {addType === "initial" && <Fingerprint className="h-4 w-4" />}
+                      {addType === "stamp" && <Stamp className="h-4 w-4" />}
+                      {TYPE_LABELS[addType]}
+                    </span>
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="signature">
@@ -275,9 +288,9 @@ export default function SignatureSettings() {
               <Input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder={`My ${TYPE_LABELS[addType]}`} />
             </div>
 
-            {/* Draw / Upload tabs */}
+            {/* Draw / Upload tabs — Stamp is upload-only */}
             <Tabs value={addTab} onValueChange={(v) => { setAddTab(v as "draw" | "upload"); setAddUploadImage(null); }}>
-              <TabsList className="w-full">
+              <TabsList className={`w-full ${addType === "stamp" ? "hidden" : ""}`}>
                 <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
                 <TabsTrigger value="upload" className="flex-1">Upload Image</TabsTrigger>
               </TabsList>
