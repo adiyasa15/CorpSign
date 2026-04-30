@@ -13,6 +13,7 @@ export const documentsTable = pgTable("documents", {
   status: documentStatusEnum("status").notNull().default("pending"),
   signerName: text("signer_name").notNull(),
   signerEmail: text("signer_email").notNull(),
+  uploadedById: integer("uploaded_by_id"),
   signedAt: timestamp("signed_at"),
   signatureData: text("signature_data"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

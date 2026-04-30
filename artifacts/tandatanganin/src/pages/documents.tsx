@@ -39,23 +39,27 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { formatDate, formatBytes } from "@/lib/format";
-import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical } from "lucide-react";
+import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical, Download } from "lucide-react";
 import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function Documents() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "signed" | "rejected">("all");
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
 
   const { data: documents, isLoading } = useListDocuments({ 
     search: search || undefined, 
     status: statusFilter === "all" ? undefined : statusFilter 
   });
+
+  const isApprover = user?.role === "approver";
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -64,7 +68,7 @@ export default function Documents() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Documents</h1>
           <p className="text-muted-foreground mt-1 text-lg">Manage and track your document signing requests.</p>
         </div>
-        <CreateDocumentDialog />
+        {!isApprover && <CreateDocumentDialog />}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
@@ -113,48 +117,57 @@ export default function Documents() {
                 </TableRow>
               ))
             ) : documents && documents.length > 0 ? (
-              documents.map((doc) => (
-                <TableRow key={doc.id} className="cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => setLocation(`/documents/${doc.id}`)}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                        <FileText className="h-5 w-5" />
+              documents.map((doc) => {
+                const isOwner = user?.role === "admin" || user?.role === "superadmin" || user?.id === doc.userId;
+                return (
+                  <TableRow key={doc.id} className="cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => setLocation(`/documents/${doc.id}`)}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{doc.title}</p>
+                          <p className="text-xs text-muted-foreground">{doc.fileName} • {formatBytes(doc.fileSize)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{doc.title}</p>
-                        <p className="text-xs text-muted-foreground">{doc.fileName} • {formatBytes(doc.fileSize)}</p>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={doc.status} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{doc.signerName}</span>
+                        <span className="text-xs text-muted-foreground">{doc.signerEmail}</span>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={doc.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{doc.signerName}</span>
-                      <span className="text-xs text-muted-foreground">{doc.signerEmail}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(doc.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/documents/${doc.id}`); }}>
-                          View Details
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(doc.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" className="h-8 w-8 p-0" data-testid={`doc-actions-${doc.id}`}>
+                            <span className="sr-only">Open menu</span>
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/documents/${doc.id}`); }} data-testid={`view-doc-${doc.id}`}>
+                            View Details
+                          </DropdownMenuItem>
+                          {isApprover && doc.status === "signed" && doc.signatureData && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(doc.signatureData!, "_blank"); }} data-testid={`download-doc-${doc.id}`}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={5} className="h-64 text-center">

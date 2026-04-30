@@ -123,6 +123,94 @@ export interface ActivityItem {
   timestamp: string;
 }
 
+export type AuthUserRole = (typeof AuthUserRole)[keyof typeof AuthUserRole];
+
+export const AuthUserRole = {
+  superadmin: "superadmin",
+  admin: "admin",
+  user: "user",
+  approver: "approver",
+} as const;
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: AuthUserRole;
+}
+
+export interface LoginBody {
+  username: string;
+  password: string;
+}
+
+export type UserProfileRole =
+  (typeof UserProfileRole)[keyof typeof UserProfileRole];
+
+export const UserProfileRole = {
+  superadmin: "superadmin",
+  admin: "admin",
+  user: "user",
+  approver: "approver",
+} as const;
+
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  companyName?: string | null;
+  division?: string | null;
+  role: UserProfileRole;
+  isActive: boolean;
+  hasGoogleSSO: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateUserBodyRole =
+  (typeof CreateUserBodyRole)[keyof typeof CreateUserBodyRole];
+
+export const CreateUserBodyRole = {
+  admin: "admin",
+  user: "user",
+  approver: "approver",
+} as const;
+
+export interface CreateUserBody {
+  name: string;
+  email: string;
+  phone: string;
+  companyName?: string;
+  division?: string;
+  role: CreateUserBodyRole;
+  password?: string;
+}
+
+export type UpdateUserBodyRole =
+  (typeof UpdateUserBodyRole)[keyof typeof UpdateUserBodyRole];
+
+export const UpdateUserBodyRole = {
+  admin: "admin",
+  user: "user",
+  approver: "approver",
+} as const;
+
+export interface UpdateUserBody {
+  name?: string;
+  email?: string;
+  phone?: string;
+  companyName?: string;
+  division?: string;
+  role?: UpdateUserBodyRole;
+  isActive?: boolean;
+  password?: string;
+}
+
+export type Logout200 = {
+  ok: boolean;
+};
+
 export type ListDocumentsParams = {
   status?: ListDocumentsStatus;
   search?: string;

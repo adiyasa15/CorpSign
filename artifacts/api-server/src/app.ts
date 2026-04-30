@@ -1,6 +1,9 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import passport from "./lib/passport";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -25,9 +28,41 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json());
+
+const PgSession = connectPgSimple(session);
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  }),
+);
+
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+const sessionSecret = process.env.SESSION_SECRET ?? "tandatanganin-dev-secret-change-in-prod";
+
+app.use(
+  session({
+    store: new PgSession({
+      conString: process.env.DATABASE_URL,
+      tableName: "user_sessions",
+    }),
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: "lax",
+    },
+  }),
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use("/api", router);
 

@@ -12,10 +12,15 @@ import {
   SignDocumentParams,
   SignDocumentBody,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
 
-router.get("/documents", async (req, res) => {
+function canSeeAllDocs(role: string) {
+  return role === "admin" || role === "superadmin";
+}
+
+router.get("/documents", requireAuth, async (req, res) => {
   try {
     const query = ListDocumentsQueryParams.safeParse(req.query);
     if (!query.success) {
@@ -23,6 +28,7 @@ router.get("/documents", async (req, res) => {
       return;
     }
     const { status, search } = query.data;
+    const user = req.user!;
 
     const conditions = [];
     if (status && status !== "all") {
@@ -38,6 +44,17 @@ router.get("/documents", async (req, res) => {
       );
     }
 
+    if (user.role === "approver") {
+      conditions.push(
+        and(
+          eq(documentsTable.signerEmail, user.email),
+          eq(documentsTable.status, "signed"),
+        )!,
+      );
+    } else if (!canSeeAllDocs(user.role)) {
+      conditions.push(eq(documentsTable.uploadedById, user.id));
+    }
+
     const docs = conditions.length > 0
       ? await db.select().from(documentsTable).where(and(...conditions)).orderBy(documentsTable.createdAt)
       : await db.select().from(documentsTable).orderBy(documentsTable.createdAt);
@@ -49,8 +66,14 @@ router.get("/documents", async (req, res) => {
   }
 });
 
-router.post("/documents", async (req, res) => {
+router.post("/documents", requireAuth, async (req, res) => {
   try {
+    const user = req.user!;
+    if (user.role === "approver") {
+      res.status(403).json({ error: "Approvers cannot upload documents" });
+      return;
+    }
+
     const body = CreateDocumentBody.safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ error: "Invalid body" });
@@ -60,6 +83,7 @@ router.post("/documents", async (req, res) => {
     const [doc] = await db.insert(documentsTable).values({
       ...body.data,
       status: "pending",
+      uploadedById: user.id,
     }).returning();
 
     await db.insert(activityTable).values({
@@ -76,7 +100,7 @@ router.post("/documents", async (req, res) => {
   }
 });
 
-router.get("/documents/:id", async (req, res) => {
+router.get("/documents/:id", requireAuth, async (req, res) => {
   try {
     const params = GetDocumentParams.safeParse({ id: Number(req.params.id) });
     if (!params.success) {
@@ -90,6 +114,18 @@ router.get("/documents/:id", async (req, res) => {
       return;
     }
 
+    const user = req.user!;
+    if (!canSeeAllDocs(user.role) && user.role !== "approver") {
+      if (doc.uploadedById !== user.id) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
+    if (user.role === "approver" && (doc.signerEmail !== user.email || doc.status !== "signed")) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
     res.json(formatDocument(doc));
   } catch (err) {
     req.log.error(err);
@@ -97,7 +133,7 @@ router.get("/documents/:id", async (req, res) => {
   }
 });
 
-router.patch("/documents/:id", async (req, res) => {
+router.patch("/documents/:id", requireAuth, async (req, res) => {
   try {
     const params = UpdateDocumentParams.safeParse({ id: Number(req.params.id) });
     const body = UpdateDocumentBody.safeParse(req.body);
@@ -107,16 +143,27 @@ router.patch("/documents/:id", async (req, res) => {
       return;
     }
 
+    const user = req.user!;
+    if (user.role === "approver") {
+      res.status(403).json({ error: "Approvers cannot modify documents" });
+      return;
+    }
+
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, params.data.id));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (!canSeeAllDocs(user.role) && existing.uploadedById !== user.id) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
     const [doc] = await db
       .update(documentsTable)
       .set({ ...body.data, updatedAt: new Date() })
       .where(eq(documentsTable.id, params.data.id))
       .returning();
-
-    if (!doc) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
 
     res.json(formatDocument(doc));
   } catch (err) {
@@ -125,11 +172,27 @@ router.patch("/documents/:id", async (req, res) => {
   }
 });
 
-router.delete("/documents/:id", async (req, res) => {
+router.delete("/documents/:id", requireAuth, async (req, res) => {
   try {
     const params = DeleteDocumentParams.safeParse({ id: Number(req.params.id) });
     if (!params.success) {
       res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    const user = req.user!;
+    if (user.role === "approver") {
+      res.status(403).json({ error: "Approvers cannot delete documents" });
+      return;
+    }
+
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, params.data.id));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (!canSeeAllDocs(user.role) && existing.uploadedById !== user.id) {
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
 
@@ -141,7 +204,7 @@ router.delete("/documents/:id", async (req, res) => {
   }
 });
 
-router.post("/documents/:id/sign", async (req, res) => {
+router.post("/documents/:id/sign", requireAuth, async (req, res) => {
   try {
     const params = SignDocumentParams.safeParse({ id: Number(req.params.id) });
     const body = SignDocumentBody.safeParse(req.body);
@@ -149,6 +212,19 @@ router.post("/documents/:id/sign", async (req, res) => {
     if (!params.success || !body.success) {
       res.status(400).json({ error: "Invalid input" });
       return;
+    }
+
+    const user = req.user!;
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, params.data.id));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (!canSeeAllDocs(user.role) && user.role !== "approver") {
+      if (existing.uploadedById !== user.id) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
     }
 
     const [doc] = await db
@@ -161,11 +237,6 @@ router.post("/documents/:id/sign", async (req, res) => {
       })
       .where(eq(documentsTable.id, params.data.id))
       .returning();
-
-    if (!doc) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
 
     await db.insert(activityTable).values({
       documentId: doc.id,
@@ -191,6 +262,7 @@ function formatDocument(doc: typeof documentsTable.$inferSelect) {
     status: doc.status,
     signerName: doc.signerName,
     signerEmail: doc.signerEmail,
+    uploadedById: doc.uploadedById ?? null,
     signedAt: doc.signedAt?.toISOString() ?? null,
     signatureData: doc.signatureData ?? null,
     createdAt: doc.createdAt.toISOString(),

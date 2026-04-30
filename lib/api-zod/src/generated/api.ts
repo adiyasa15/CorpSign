@@ -8,6 +8,125 @@
 import * as zod from "zod";
 
 /**
+ * @summary Get current authenticated user
+ */
+export const GetMeResponse = zod.object({
+  id: zod.number(),
+  email: zod.string(),
+  name: zod.string(),
+  role: zod.enum(["superadmin", "admin", "user", "approver"]),
+});
+
+/**
+ * @summary Login with username/password
+ */
+export const LoginLocalBody = zod.object({
+  username: zod.string(),
+  password: zod.string(),
+});
+
+export const LoginLocalResponse = zod.object({
+  id: zod.number(),
+  email: zod.string(),
+  name: zod.string(),
+  role: zod.enum(["superadmin", "admin", "user", "approver"]),
+});
+
+/**
+ * @summary Logout
+ */
+export const LogoutResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List all users (admin/superadmin only)
+ */
+export const ListUsersResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  companyName: zod.string().nullish(),
+  division: zod.string().nullish(),
+  role: zod.enum(["superadmin", "admin", "user", "approver"]),
+  isActive: zod.boolean(),
+  hasGoogleSSO: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListUsersResponse = zod.array(ListUsersResponseItem);
+
+/**
+ * @summary Create a new user (admin/superadmin only)
+ */
+export const CreateUserBody = zod.object({
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  companyName: zod.string().optional(),
+  division: zod.string().optional(),
+  role: zod.enum(["admin", "user", "approver"]),
+  password: zod.string().optional(),
+});
+
+/**
+ * @summary Get current user profile
+ */
+export const GetMyProfileResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  companyName: zod.string().nullish(),
+  division: zod.string().nullish(),
+  role: zod.enum(["superadmin", "admin", "user", "approver"]),
+  isActive: zod.boolean(),
+  hasGoogleSSO: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update a user (admin/superadmin only)
+ */
+export const UpdateUserParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateUserBody = zod.object({
+  name: zod.string().optional(),
+  email: zod.string().optional(),
+  phone: zod.string().optional(),
+  companyName: zod.string().optional(),
+  division: zod.string().optional(),
+  role: zod.enum(["admin", "user", "approver"]).optional(),
+  isActive: zod.boolean().optional(),
+  password: zod.string().optional(),
+});
+
+export const UpdateUserResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  companyName: zod.string().nullish(),
+  division: zod.string().nullish(),
+  role: zod.enum(["superadmin", "admin", "user", "approver"]),
+  isActive: zod.boolean(),
+  hasGoogleSSO: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete a user (admin/superadmin only)
+ */
+export const DeleteUserParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
