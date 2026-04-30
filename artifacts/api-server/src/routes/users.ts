@@ -182,6 +182,32 @@ router.post("/users", requireAdminOrSuperAdmin, async (req, res) => {
   }
 });
 
+const UpdateProfileBody = z.object({
+  name: z.string().min(1).max(200),
+  phone: z.string().min(1).max(30),
+});
+
+router.patch("/users/profile", requireAuth, async (req, res) => {
+  try {
+    const parsed = UpdateProfileBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
+      return;
+    }
+    const [updated] = await db
+      .update(usersTable)
+      .set({ name: parsed.data.name, phone: parsed.data.phone, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.user!.id))
+      .returning();
+    req.user!.name = updated.name;
+    req.user!.phone = updated.phone;
+    res.json({ name: updated.name, phone: updated.phone });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.patch("/users/:id", requireAdminOrSuperAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);

@@ -222,6 +222,8 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   settings_profile_desc: "Perbarui detail pribadi Anda yang digunakan untuk tanda tangan.",
   settings_first_name: "Nama Depan",
   settings_last_name: "Nama Belakang",
+  settings_phone: "Nomor Telepon",
+  settings_phone_placeholder: "812 3456 7890",
   settings_email: "Alamat Email",
   settings_email_hint: "Untuk mengubah email, silakan hubungi dukungan.",
   settings_language_title: "Bahasa",

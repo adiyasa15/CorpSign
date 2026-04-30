@@ -220,6 +220,8 @@ export const en = {
   settings_profile_desc: "Update your personal details used for signatures.",
   settings_first_name: "First Name",
   settings_last_name: "Last Name",
+  settings_phone: "Phone Number",
+  settings_phone_placeholder: "812 3456 7890",
   settings_email: "Email Address",
   settings_email_hint: "To change your email, please contact support.",
   settings_language_title: "Language",

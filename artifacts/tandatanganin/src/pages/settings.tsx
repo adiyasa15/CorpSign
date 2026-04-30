@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { User, Bell, Shield, Globe } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -11,14 +12,63 @@ import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 
+const COUNTRY_CODES = [
+  { code: "+62", label: "🇮🇩 Indonesia (+62)" },
+  { code: "+1",  label: "🇺🇸 United States (+1)" },
+  { code: "+44", label: "🇬🇧 United Kingdom (+44)" },
+  { code: "+61", label: "🇦🇺 Australia (+61)" },
+  { code: "+65", label: "🇸🇬 Singapore (+65)" },
+  { code: "+60", label: "🇲🇾 Malaysia (+60)" },
+  { code: "+63", label: "🇵🇭 Philippines (+63)" },
+  { code: "+66", label: "🇹🇭 Thailand (+66)" },
+  { code: "+84", label: "🇻🇳 Vietnam (+84)" },
+  { code: "+95", label: "🇲🇲 Myanmar (+95)" },
+  { code: "+855", label: "🇰🇭 Cambodia (+855)" },
+  { code: "+856", label: "🇱🇦 Laos (+856)" },
+  { code: "+673", label: "🇧🇳 Brunei (+673)" },
+  { code: "+670", label: "🇹🇱 Timor-Leste (+670)" },
+  { code: "+86",  label: "🇨🇳 China (+86)" },
+  { code: "+81",  label: "🇯🇵 Japan (+81)" },
+  { code: "+82",  label: "🇰🇷 South Korea (+82)" },
+  { code: "+91",  label: "🇮🇳 India (+91)" },
+  { code: "+92",  label: "🇵🇰 Pakistan (+92)" },
+  { code: "+880", label: "🇧🇩 Bangladesh (+880)" },
+  { code: "+94",  label: "🇱🇰 Sri Lanka (+94)" },
+  { code: "+971", label: "🇦🇪 UAE (+971)" },
+  { code: "+966", label: "🇸🇦 Saudi Arabia (+966)" },
+  { code: "+20",  label: "🇪🇬 Egypt (+20)" },
+  { code: "+27",  label: "🇿🇦 South Africa (+27)" },
+  { code: "+234", label: "🇳🇬 Nigeria (+234)" },
+  { code: "+49",  label: "🇩🇪 Germany (+49)" },
+  { code: "+33",  label: "🇫🇷 France (+33)" },
+  { code: "+39",  label: "🇮🇹 Italy (+39)" },
+  { code: "+34",  label: "🇪🇸 Spain (+34)" },
+  { code: "+31",  label: "🇳🇱 Netherlands (+31)" },
+  { code: "+7",   label: "🇷🇺 Russia (+7)" },
+  { code: "+55",  label: "🇧🇷 Brazil (+55)" },
+  { code: "+52",  label: "🇲🇽 Mexico (+52)" },
+];
+
+function splitPhone(full: string): { code: string; local: string } {
+  const sorted = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+  for (const c of sorted) {
+    if (full.startsWith(c.code)) {
+      return { code: c.code, local: full.slice(c.code.length).trimStart() };
+    }
+  }
+  return { code: "+62", local: full.replace(/^\+\d+\s*/, "") };
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const { t, language, setLanguage } = useLanguage();
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, refetch } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [phoneCode, setPhoneCode] = useState("+62");
+  const [phoneLocal, setPhoneLocal] = useState("");
 
   useEffect(() => {
     if (user?.name) {
@@ -26,14 +76,32 @@ export default function Settings() {
       setFirstName(parts[0] ?? "");
       setLastName(parts.slice(1).join(" "));
     }
-  }, [user?.name]);
+    if (user?.phone !== undefined) {
+      const { code, local } = splitPhone(user.phone ?? "");
+      setPhoneCode(code);
+      setPhoneLocal(local);
+    }
+  }, [user?.name, user?.phone]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
+    try {
+      const name = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || (user?.name ?? "");
+      const phone = `${phoneCode}${phoneLocal.trim()}`;
+      const res = await fetch("/api/users/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, phone }),
+      });
+      if (!res.ok) throw new Error("failed");
+      refetch();
       toast({ title: t("settings_saved") });
-    }, 800);
+    } catch {
+      toast({ title: t("error"), variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -59,6 +127,7 @@ export default function Settings() {
                   <Skeleton className="h-9 w-full" />
                 </div>
                 <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
               </div>
             ) : (
               <>
@@ -77,6 +146,30 @@ export default function Settings() {
                       id="lastName"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phoneLocal">{t("settings_phone")}</Label>
+                  <div className="flex gap-2">
+                    <Select value={phoneCode} onValueChange={setPhoneCode}>
+                      <SelectTrigger className="w-52 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {COUNTRY_CODES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="phoneLocal"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder={t("settings_phone_placeholder") as string}
+                      value={phoneLocal}
+                      onChange={(e) => setPhoneLocal(e.target.value.replace(/[^\d\s\-]/g, ""))}
+                      className="flex-1"
                     />
                   </div>
                 </div>
