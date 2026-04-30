@@ -492,11 +492,11 @@ export default function DocumentEditor() {
           <div className="p-4 space-y-5">
             {/* Signers */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Signers</span>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAddSignerOpen(true)}>
+              <div className="flex items-center gap-2 mb-2">
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAddSignerOpen(true)}>
                   <UserPlus className="h-3.5 w-3.5" />
                 </Button>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Signers</span>
               </div>
               {signers.length === 0 && (
                 <p className="text-xs text-muted-foreground italic">No signers added yet</p>
@@ -511,23 +511,23 @@ export default function DocumentEditor() {
                     onDrop={(e) => handleDrop(e, idx)}
                     onDragEnd={() => { setDragSignerId(null); setDropOverIdx(null); }}
                     onClick={() => setActiveSignerId(s.id)}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all select-none ${
+                    className={`flex items-center gap-1.5 px-1.5 py-1.5 rounded-lg cursor-pointer transition-all select-none overflow-hidden ${
                       activeSignerId === s.id ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted"
                     } ${dropOverIdx === idx && dragSignerId !== s.id ? "ring-2 ring-primary/60 bg-primary/5" : ""}`}
                   >
                     <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-grab" />
-                    <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{s.email}</p>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">#{idx + 1}</span>
                     <Button
                       variant="ghost" size="icon" className="h-5 w-5 hover:text-destructive shrink-0"
                       onClick={(e) => { e.stopPropagation(); removeSigner(s.id); }}
                     >
                       <X className="h-3 w-3" />
                     </Button>
+                    <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{s.email}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">#{idx + 1}</span>
                   </div>
                 ))}
               </div>
@@ -575,11 +575,11 @@ export default function DocumentEditor() {
 
             {/* CC / Observers */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CC / Observers</span>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAddCcOpen(true)}>
+              <div className="flex items-center gap-2 mb-2">
+                <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAddCcOpen(true)}>
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CC / Observers</span>
               </div>
               <p className="text-[11px] text-muted-foreground mb-2 leading-tight">Registered users who receive notifications and can download the final document.</p>
               {ccUsers.length === 0 && (
@@ -587,16 +587,16 @@ export default function DocumentEditor() {
               )}
               <div className="space-y-1">
                 {ccUsers.map((cc) => (
-                  <div key={cc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50">
+                  <div key={cc.id} className="flex items-center gap-1.5 px-1.5 py-1.5 rounded-lg bg-muted/50 overflow-hidden">
                     <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{cc.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{cc.email}</p>
-                    </div>
                     <Button variant="ghost" size="icon" className="h-5 w-5 hover:text-destructive shrink-0"
                       onClick={() => removeCcUser(cc.id)}>
                       <X className="h-3 w-3" />
                     </Button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{cc.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{cc.email}</p>
+                    </div>
                   </div>
                 ))}
               </div>
