@@ -208,6 +208,59 @@ router.delete("/users/:id", requireAdminOrSuperAdmin, async (req, res) => {
   }
 });
 
+router.get("/users/pending", requireAdminOrSuperAdmin, async (req, res) => {
+  try {
+    const users = await db.select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      companyName: usersTable.companyName,
+      division: usersTable.division,
+      role: usersTable.role,
+      isActive: usersTable.isActive,
+      googleId: usersTable.googleId,
+      createdAt: usersTable.createdAt,
+      updatedAt: usersTable.updatedAt,
+    }).from(usersTable).where(eq(usersTable.pendingApproval, true)).orderBy(usersTable.createdAt);
+    res.json(users.map(formatUser));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/users/:id/approve", requireAdminOrSuperAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+    if (!user) { res.status(404).json({ error: "Not found" }); return; }
+    if (!user.pendingApproval) { res.status(400).json({ error: "User is not pending approval" }); return; }
+    const [updated] = await db.update(usersTable)
+      .set({ isActive: true, pendingApproval: false, updatedAt: new Date() })
+      .where(eq(usersTable.id, id))
+      .returning();
+    res.json(formatUser(updated));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/users/:id/reject", requireAdminOrSuperAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+    if (!user) { res.status(404).json({ error: "Not found" }); return; }
+    if (!user.pendingApproval) { res.status(400).json({ error: "User is not pending approval" }); return; }
+    await db.delete(usersTable).where(eq(usersTable.id, id));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 function formatUser(user: {
   id: number;
   name: string;

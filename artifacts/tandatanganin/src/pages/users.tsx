@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useListUsers,
   useCreateUser,
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -51,7 +52,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Search, CheckCircle, XCircle, Clock } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -335,8 +336,20 @@ function UserDialog({ user, open, setOpen }: { user?: UserProfile; open: boolean
   );
 }
 
+interface PendingUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  companyName: string | null;
+  division: string | null;
+  role: string;
+  createdAt: string;
+}
+
 export default function Users() {
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
   const { data: users, isLoading } = useListUsers();
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -345,6 +358,47 @@ export default function Users() {
   const deleteMutation = useDeleteUser();
   const updateMutation = useUpdateUser();
   const { toast } = useToast();
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  const { data: pendingUsers, isLoading: pendingLoading, refetch: refetchPending } = useQuery<PendingUser[]>({
+    queryKey: ["pending-users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users/pending", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load pending users");
+      return res.json();
+    },
+    enabled: activeTab === "pending",
+  });
+
+  const handleApprove = async (id: number) => {
+    setApprovingId(id);
+    try {
+      const res = await fetch(`/api/users/${id}/approve`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error();
+      toast({ title: "User approved and activated" });
+      refetchPending();
+      queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to approve user" });
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleReject = async (id: number) => {
+    setApprovingId(id);
+    try {
+      const res = await fetch(`/api/users/${id}/reject`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error();
+      toast({ title: "User rejected and removed" });
+      refetchPending();
+      queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to reject user" });
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
@@ -401,114 +455,234 @@ export default function Users() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search users..."
-            className="pl-9 w-full bg-background"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader className="bg-secondary/50">
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Organization</TableHead>
-              <TableHead>SSO</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-10 w-[200px]" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-[150px]" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-[50px]" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
-                </TableRow>
-              ))
-            ) : filteredUsers && filteredUsers.length > 0 ? (
-              filteredUsers.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{u.name}</span>
-                      <span className="text-sm text-muted-foreground">{u.email}</span>
-                      {u.phone && <span className="text-xs text-muted-foreground">{u.phone}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">{u.role}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {u.isActive ? (
-                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-none">Active</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-muted-foreground">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col text-sm">
-                      <span>{u.companyName || "-"}</span>
-                      <span className="text-muted-foreground">{u.division || ""}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {u.hasGoogleSSO ? <Badge variant="outline">Yes</Badge> : <span className="text-muted-foreground text-sm">No</span>}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditingUser(u); setDialogOpen(true); }} data-testid={`edit-user-${u.id}`}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleToggleActive(u)} data-testid={`toggle-user-${u.id}`}>
-                        {u.isActive ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-muted-foreground" />}
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" data-testid={`delete-user-${u.id}`}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete User?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete {u.name}? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(u.id)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                  No users found.
-                </TableCell>
-              </TableRow>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="all">All Users</TabsTrigger>
+          <TabsTrigger value="pending" className="gap-2">
+            <Clock className="h-3.5 w-3.5" />
+            Pending Approvals
+            {pendingUsers && pendingUsers.length > 0 && (
+              <Badge className="ml-1 h-4 min-w-4 px-1 text-[10px] bg-amber-500 hover:bg-amber-500 border-none">{pendingUsers.length}</Badge>
             )}
-          </TableBody>
-        </Table>
-      </div>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="mt-4 space-y-4">
+          <div className="flex items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                className="pl-9 w-full bg-background"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader className="bg-secondary/50">
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Organization</TableHead>
+                  <TableHead>SSO</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-10 w-[200px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[80px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[150px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[50px]" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredUsers && filteredUsers.length > 0 ? (
+                  filteredUsers.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{u.name}</span>
+                          <span className="text-sm text-muted-foreground">{u.email}</span>
+                          {u.phone && <span className="text-xs text-muted-foreground">{u.phone}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{u.role}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {u.isActive ? (
+                          <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-none">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-muted-foreground">Inactive</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-sm">
+                          <span>{u.companyName || "-"}</span>
+                          <span className="text-muted-foreground">{u.division || ""}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {u.hasGoogleSSO ? <Badge variant="outline">Yes</Badge> : <span className="text-muted-foreground text-sm">No</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => { setEditingUser(u); setDialogOpen(true); }} data-testid={`edit-user-${u.id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleToggleActive(u)} data-testid={`toggle-user-${u.id}`}>
+                            {u.isActive ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-muted-foreground" />}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" data-testid={`delete-user-${u.id}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete {u.name}? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleDelete(u.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                      No users found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pending" className="mt-4">
+          <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
+            <div className="px-6 py-4 border-b border-border bg-amber-50/50 dark:bg-amber-950/10">
+              <h2 className="font-semibold text-sm flex items-center gap-2 text-amber-800 dark:text-amber-400">
+                <Clock className="h-4 w-4" />
+                Accounts awaiting approval
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">These users signed in with Google for the first time and need an admin to approve their access.</p>
+            </div>
+            <Table>
+              <TableHeader className="bg-secondary/50">
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Organization</TableHead>
+                  <TableHead>Requested</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingLoading ? (
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-10 w-[200px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[150px]" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-[100px]" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : pendingUsers && pendingUsers.length > 0 ? (
+                  pendingUsers.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{u.name}</span>
+                          <span className="text-sm text-muted-foreground">{u.email}</span>
+                          {u.phone && <span className="text-xs text-muted-foreground">{u.phone}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col text-sm">
+                          <span>{u.companyName || "-"}</span>
+                          <span className="text-muted-foreground">{u.division || ""}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(u.createdAt).toLocaleDateString()}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                            disabled={approvingId === u.id}
+                            onClick={() => handleApprove(u.id)}
+                            data-testid={`approve-user-${u.id}`}
+                          >
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            Approve
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 border-destructive text-destructive hover:bg-destructive/10"
+                                disabled={approvingId === u.id}
+                                data-testid={`reject-user-${u.id}`}
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Reject
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reject user access?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete {u.name}'s account request. They will need to sign in again to re-request access.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleReject(u.id)}>
+                                  Reject & Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                      No pending approvals.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <UserDialog open={dialogOpen} setOpen={setDialogOpen} user={editingUser} />
     </div>

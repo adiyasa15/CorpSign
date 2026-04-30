@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
-  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2,
+  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -25,6 +25,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
   import.meta.url,
 ).toString();
+
+interface CcRecipient {
+  id: number;
+  userId: number;
+  name: string;
+  email: string;
+  role: string;
+}
 
 interface DocDetail {
   id: number;
@@ -39,6 +47,7 @@ interface DocDetail {
   uploadedById: number | null;
   signers: Signer[];
   fields: Field[];
+  cc?: CcRecipient[];
 }
 
 interface Signer {
@@ -389,6 +398,28 @@ export default function DocumentDetail() {
               )}
             </CardContent>
           </Card>
+
+          {doc.cc && doc.cc.length > 0 && (
+            <Card>
+              <CardHeader className="border-b pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  CC / Observers
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 space-y-1">
+                {doc.cc.map((cc) => (
+                  <div key={cc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{cc.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{cc.email}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] capitalize shrink-0">{cc.role}</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

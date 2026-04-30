@@ -15,6 +15,7 @@ export const usersTable = pgTable("users", {
   googleId: text("google_id").unique(),
   passwordHash: text("password_hash"),
   isActive: boolean("is_active").notNull().default(true),
+  pendingApproval: boolean("pending_approval").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

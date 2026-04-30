@@ -31,19 +31,30 @@ router.post("/auth/login", (req, res, next) => {
 
 router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
-router.get(
-  "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
-  (req, res) => {
-    req.session.save((err) => {
-      if (err) {
-        res.redirect("/login?error=session_error");
+router.get("/auth/google/callback", (req, res, next) => {
+  passport.authenticate(
+    "google",
+    (err: Error | null, user: Express.User | false, info: { message?: string } | undefined) => {
+      if (err) { next(err); return; }
+      if (!user) {
+        const msg = info?.message ?? "google_failed";
+        if (msg === "pending_approval") {
+          res.redirect("/login?error=pending_approval");
+        } else {
+          res.redirect("/login?error=google_failed");
+        }
         return;
       }
-      res.redirect("/");
-    });
-  },
-);
+      req.logIn(user, (loginErr) => {
+        if (loginErr) { next(loginErr); return; }
+        req.session.save((saveErr) => {
+          if (saveErr) { res.redirect("/login?error=session_error"); return; }
+          res.redirect("/");
+        });
+      });
+    },
+  )(req, res, next);
+});
 
 router.post("/auth/logout", (req, res, next) => {
   req.logout((err) => {

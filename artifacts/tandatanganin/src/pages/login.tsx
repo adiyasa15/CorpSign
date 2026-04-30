@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PenTool, Loader2, AlertCircle } from "lucide-react";
+import { PenTool, Loader2, AlertCircle, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+
+const PENDING_APPROVAL_CODE = "pending_approval";
 
 function getErrorMessage(errorCode: string | null): string | null {
   if (!errorCode) return null;
@@ -17,6 +19,7 @@ function getErrorMessage(errorCode: string | null): string | null {
     google_failed: "Google sign-in failed. Make sure your Google account is allowed to access this app. If the app is in testing mode, ask your administrator to add your email as a test user.",
     session_error: "A session error occurred. Please try again.",
     access_denied: "Access was denied. Please try again or use your email/password instead.",
+    pending_approval: "Your account has been registered and is waiting for admin approval. You will be able to log in once an administrator approves your access.",
   };
   return messages[errorCode] ?? "Sign-in failed. Please try again.";
 }
@@ -76,10 +79,17 @@ export default function Login() {
           </CardHeader>
           <CardContent className="space-y-6">
             {errorMessage && (
-              <Alert variant="destructive" data-testid="login-error-alert">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
+              errorCode === PENDING_APPROVAL_CODE ? (
+                <Alert className="border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/20 dark:text-amber-300" data-testid="login-error-alert">
+                  <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="font-medium">{errorMessage}</AlertDescription>
+                </Alert>
+              ) : (
+                <Alert variant="destructive" data-testid="login-error-alert">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              )
             )}
 
             <Button

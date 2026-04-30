@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { documentsTable, signaturesTable, activityTable } from "@workspace/db";
-import { eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -27,8 +27,7 @@ router.get("/dashboard/summary", async (req, res) => {
     const [sigMonth] = await db
       .select({ total: sql<number>`count(*)::int` })
       .from(activityTable)
-      .where(eq(activityTable.action, "signed") as any)
-      .where(gte(activityTable.timestamp, thisMonth));
+      .where(and(eq(activityTable.action, "signed"), gte(activityTable.timestamp, thisMonth)));
 
     res.json({
       totalDocuments: totals.total,

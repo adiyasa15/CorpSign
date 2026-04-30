@@ -9,6 +9,8 @@ import {
   documentSignersTable,
   documentFieldsTable,
   documentAuditTable,
+  documentCcTable,
+  usersTable,
 } from "@workspace/db";
 import { eq, ilike, and, or, inArray } from "drizzle-orm";
 import {
@@ -94,19 +96,32 @@ router.get("/documents", requireAuth, async (req, res) => {
       );
     }
 
+    // Get CC'd document IDs for this user (all roles)
+    const ccDocRows = await db
+      .select({ documentId: documentCcTable.documentId })
+      .from(documentCcTable)
+      .where(eq(documentCcTable.userId, user.id));
+    const ccDocIds = ccDocRows.map((r) => r.documentId);
+
     if (user.role === "approver") {
       const mySignerDocs = await db
         .select({ documentId: documentSignersTable.documentId })
         .from(documentSignersTable)
         .where(eq(documentSignersTable.email, user.email));
-      const docIds = mySignerDocs.map((r) => r.documentId);
-      if (docIds.length === 0) {
+      const signerDocIds = mySignerDocs.map((r) => r.documentId);
+      const allIds = [...new Set([...signerDocIds, ...ccDocIds])];
+      if (allIds.length === 0) {
         res.json([]);
         return;
       }
-      conditions.push(inArray(documentsTable.id, docIds));
+      conditions.push(inArray(documentsTable.id, allIds));
     } else if (!canSeeAllDocs(user.role)) {
-      conditions.push(eq(documentsTable.uploadedById, user.id));
+      // Regular users: own docs + CC'd docs
+      if (ccDocIds.length > 0) {
+        conditions.push(or(eq(documentsTable.uploadedById, user.id), inArray(documentsTable.id, ccDocIds))!);
+      } else {
+        conditions.push(eq(documentsTable.uploadedById, user.id));
+      }
     }
 
     const docs = conditions.length > 0
@@ -332,19 +347,28 @@ router.get("/documents/:id", requireAuth, async (req, res) => {
     const isSigner = (await db.select().from(documentSignersTable).where(
       and(eq(documentSignersTable.documentId, doc.id), eq(documentSignersTable.email, user.email))
     )).length > 0;
+    const isCc = (await db.select().from(documentCcTable).where(
+      and(eq(documentCcTable.documentId, doc.id), eq(documentCcTable.userId, user.id))
+    )).length > 0;
 
-    if (!canSeeAllDocs(user.role) && !isOwner && !isSigner) {
+    if (!canSeeAllDocs(user.role) && !isOwner && !isSigner && !isCc) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
 
     const signers = await db.select().from(documentSignersTable).where(eq(documentSignersTable.documentId, doc.id)).orderBy(documentSignersTable.signerOrder);
     const fields = await db.select().from(documentFieldsTable).where(eq(documentFieldsTable.documentId, doc.id));
+    const ccList = await db
+      .select({ id: documentCcTable.id, userId: documentCcTable.userId, name: usersTable.name, email: usersTable.email })
+      .from(documentCcTable)
+      .innerJoin(usersTable, eq(documentCcTable.userId, usersTable.id))
+      .where(eq(documentCcTable.documentId, doc.id));
 
     res.json({
       ...formatDocument(doc),
       signers: signers.map(formatSigner),
       fields: fields.map(formatField),
+      cc: ccList,
     });
   } catch (err) {
     req.log.error(err);

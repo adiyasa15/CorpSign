@@ -97,6 +97,7 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
                 .returning();
               user = updated;
             } else {
+              // New Google SSO user — requires admin approval before access is granted
               const [created] = await db
                 .insert(usersTable)
                 .values({
@@ -105,15 +106,21 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
                   phone: "+62",
                   googleId: profile.id,
                   role: "user",
-                  isActive: true,
+                  isActive: false,
+                  pendingApproval: true,
                 })
                 .returning();
               user = created;
             }
           }
 
+          if (user.pendingApproval) {
+            done(null, false, { message: "pending_approval" });
+            return;
+          }
+
           if (!user.isActive) {
-            done(null, false);
+            done(null, false, { message: "account_disabled" });
             return;
           }
 

@@ -9,8 +9,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeft, PenLine, Fingerprint, Stamp, Plus, Trash2,
-  Send, Loader2, X, UserPlus, GripVertical,
+  Send, Loader2, X, UserPlus, GripVertical, Mail, AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -48,6 +52,14 @@ interface UserSuggestion {
   id: number;
   name: string;
   email: string;
+}
+
+interface CcUser {
+  id: number;
+  userId: number;
+  name: string;
+  email: string;
+  role: string;
 }
 
 const FIELD_DEFAULTS: Record<string, { width: number; height: number }> = {
@@ -100,6 +112,16 @@ export default function DocumentEditor() {
   const pendingSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [sending, setSending] = useState(false);
+  const [warnSignersOpen, setWarnSignersOpen] = useState(false);
+  const [signersWithoutFields, setSignersWithoutFields] = useState<Signer[]>([]);
+
+  const [ccUsers, setCcUsers] = useState<CcUser[]>([]);
+  const [addCcOpen, setAddCcOpen] = useState(false);
+  const [ccSearchQuery, setCcSearchQuery] = useState("");
+  const [ccSuggestions, setCcSuggestions] = useState<UserSuggestion[]>([]);
+  const [ccSuggestionsOpen, setCcSuggestionsOpen] = useState(false);
+  const [addingCc, setAddingCc] = useState(false);
+  const ccSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pageContainerRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -109,10 +131,11 @@ export default function DocumentEditor() {
 
   async function loadDocument() {
     try {
-      const [docRes, signersRes, fieldsRes] = await Promise.all([
+      const [docRes, signersRes, fieldsRes, ccRes] = await Promise.all([
         fetch(`/api/documents/${docId}`, { credentials: "include" }),
         fetch(`/api/documents/${docId}/signers`, { credentials: "include" }),
         fetch(`/api/documents/${docId}/fields`, { credentials: "include" }),
+        fetch(`/api/documents/${docId}/cc`, { credentials: "include" }),
       ]);
 
       if (!docRes.ok) { setLocation("/documents"); return; }
@@ -120,10 +143,12 @@ export default function DocumentEditor() {
       const docData = await docRes.json();
       const signersData = signersRes.ok ? await signersRes.json() : [];
       const fieldsData = fieldsRes.ok ? await fieldsRes.json() : [];
+      const ccData = ccRes.ok ? await ccRes.json() : [];
 
       setDoc(docData);
       setSigners(signersData);
       setFields(fieldsData);
+      setCcUsers(ccData);
 
       if (docData.filePath) {
         await renderPDF(`/api/documents/${docId}/file`);
@@ -364,9 +389,70 @@ export default function DocumentEditor() {
     }
   };
 
+  const searchCcUsers = useCallback((query: string) => {
+    if (ccSearchRef.current) clearTimeout(ccSearchRef.current);
+    if (query.trim().length < 1) { setCcSuggestions([]); setCcSuggestionsOpen(false); return; }
+    ccSearchRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, { credentials: "include" });
+        if (res.ok) {
+          const users: UserSuggestion[] = await res.json();
+          const existing = new Set(ccUsers.map((c) => c.userId));
+          setCcSuggestions(users.filter((u) => !existing.has(u.id)));
+          setCcSuggestionsOpen(true);
+        }
+      } catch { setCcSuggestions([]); }
+    }, 250);
+  }, [ccUsers]);
+
+  const addCcUser = async (userId: number) => {
+    setAddingCc(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/cc`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to add CC");
+      }
+      const cc = await res.json() as CcUser;
+      setCcUsers((prev) => [...prev, cc]);
+      setCcSearchQuery(""); setCcSuggestions([]); setCcSuggestionsOpen(false);
+      setAddCcOpen(false);
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: (e as Error).message ?? "Failed to add CC" });
+    } finally {
+      setAddingCc(false);
+    }
+  };
+
+  const removeCcUser = async (ccId: number) => {
+    try {
+      await fetch(`/api/documents/${docId}/cc/${ccId}`, { method: "DELETE", credentials: "include" });
+      setCcUsers((prev) => prev.filter((c) => c.id !== ccId));
+    } catch {
+      toast({ variant: "destructive", title: "Failed to remove CC user" });
+    }
+  };
+
   const sendForSigning = async () => {
     if (signers.length === 0) { toast({ variant: "destructive", title: "Add at least one signer" }); return; }
     if (fields.length === 0) { toast({ variant: "destructive", title: "Place at least one field" }); return; }
+
+    // Warn if any signer has no fields
+    const withoutFields = signers.filter((s) => !fields.some((f) => f.signerId === s.id));
+    if (withoutFields.length > 0) {
+      setSignersWithoutFields(withoutFields);
+      setWarnSignersOpen(true);
+      return;
+    }
+
+    await doSend();
+  };
+
+  const doSend = async () => {
     setSending(true);
     try {
       const res = await fetch(`/api/documents/${docId}/send`, { method: "POST", credentials: "include" });
@@ -483,6 +569,37 @@ export default function DocumentEditor() {
                   )}
                 </div>
               )}
+            </div>
+
+            <Separator />
+
+            {/* CC / Observers */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CC / Observers</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setAddCcOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-2 leading-tight">Registered users who receive notifications and can download the final document.</p>
+              {ccUsers.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No observers added</p>
+              )}
+              <div className="space-y-1">
+                {ccUsers.map((cc) => (
+                  <div key={cc.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/50">
+                    <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{cc.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{cc.email}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 hover:text-destructive shrink-0"
+                      onClick={() => removeCcUser(cc.id)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <Separator />
@@ -613,6 +730,88 @@ export default function DocumentEditor() {
           ))}
         </div>
       </ScrollArea>
+
+      {/* Warning: Signers without fields */}
+      <AlertDialog open={warnSignersOpen} onOpenChange={setWarnSignersOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" /> Some signers have no fields
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="mb-2">The following signers have no signature, initial, or stamp fields assigned:</p>
+                <ul className="space-y-1">
+                  {signersWithoutFields.map((s) => (
+                    <li key={s.id} className="flex items-center gap-2 text-sm">
+                      <div className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+                      <strong>{s.name}</strong> — {s.email}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-muted-foreground">They will be notified but won't have anything to sign. Do you want to send anyway?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setWarnSignersOpen(false)}>Go back and fix</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={async () => { setWarnSignersOpen(false); await doSend(); }}
+            >
+              Send anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add CC Dialog */}
+      <Dialog open={addCcOpen} onOpenChange={(open) => {
+        setAddCcOpen(open);
+        if (!open) { setCcSearchQuery(""); setCcSuggestions([]); setCcSuggestionsOpen(false); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" /> Add CC / Observer
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">Search for a registered user to add as an observer. They will receive notifications and can download the final signed document.</p>
+            <div className="space-y-2 relative">
+              <Label>Search user by name or email</Label>
+              <Input
+                value={ccSearchQuery}
+                onChange={(e) => { setCcSearchQuery(e.target.value); searchCcUsers(e.target.value); }}
+                onBlur={() => setTimeout(() => setCcSuggestionsOpen(false), 150)}
+                placeholder="Type name or email..."
+                autoComplete="off"
+              />
+              {ccSuggestionsOpen && ccSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg top-full overflow-hidden">
+                  {ccSuggestions.map((u) => (
+                    <button
+                      key={u.id}
+                      disabled={addingCc}
+                      className="w-full text-left px-3 py-2 hover:bg-muted transition-colors text-sm flex flex-col disabled:opacity-50"
+                      onMouseDown={(e) => { e.preventDefault(); addCcUser(u.id); }}
+                    >
+                      <span className="font-medium">{u.name}</span>
+                      <span className="text-xs text-muted-foreground">{u.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {ccSearchQuery.length >= 1 && ccSuggestions.length === 0 && !ccSuggestionsOpen && (
+                <p className="text-xs text-muted-foreground mt-1">No registered users found matching "{ccSearchQuery}"</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddCcOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Signer Dialog */}
       <Dialog open={addSignerOpen} onOpenChange={(open) => {

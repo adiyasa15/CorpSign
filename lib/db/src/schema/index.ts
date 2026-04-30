@@ -6,3 +6,4 @@ export * from "./document-signers";
 export * from "./document-fields";
 export * from "./signature-templates";
 export * from "./document-audit";
+export * from "./document-cc";
