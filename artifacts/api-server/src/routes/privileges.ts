@@ -17,6 +17,24 @@ async function getOrCreatePrivileges() {
   return inserted[0];
 }
 
+// Public limits endpoint (any authenticated user) — only returns upload size
+router.get("/privileges/limits", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  try {
+    const priv = await getOrCreatePrivileges();
+    res.json({
+      maxUploadSizeMb: priv.maxUploadSizeMb,
+      maxUsersPerAdmin: priv.maxUsersPerAdmin,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/privileges", requireSuperAdmin, async (req, res) => {
   try {
     const priv = await getOrCreatePrivileges();

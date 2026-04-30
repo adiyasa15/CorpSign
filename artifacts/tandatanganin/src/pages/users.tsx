@@ -53,8 +53,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Lock, Unlock, Search, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, Unlock, Search, CheckCircle, XCircle, Clock, AlertTriangle, ShieldAlert } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -96,6 +97,7 @@ const userSchema = z.object({
 function UserDialog({ user, open, setOpen }: { user?: UserProfile; open: boolean; setOpen: (open: boolean) => void }) {
   const isEditing = !!user;
   const { toast } = useToast();
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
@@ -162,7 +164,24 @@ function UserDialog({ user, open, setOpen }: { user?: UserProfile; open: boolean
             setOpen(false);
             toast({ title: "User created successfully" });
           },
-          onError: () => toast({ variant: "destructive", title: "Failed to create user" }),
+          onError: async (err: unknown) => {
+            // Try to extract structured error from the response
+            const errMsg = (err as Error)?.message ?? "";
+            if (errMsg.includes("user_limit_reached") || errMsg.includes("429")) {
+              // parse limit from message if possible
+              const limitMatch = errMsg.match(/"limit":(\d+)/);
+              const limit = limitMatch ? Number(limitMatch[1]) : null;
+              toast({
+                variant: "destructive",
+                title: "User limit reached",
+                description: limit != null ? t("limit_user_reached", limit) : "Maximum user limit reached.",
+              });
+            } else if (errMsg.includes("Email already exists") || errMsg.includes("409")) {
+              toast({ variant: "destructive", title: "Email already exists", description: "A user with this email already exists." });
+            } else {
+              toast({ variant: "destructive", title: "Failed to create user", description: errMsg || undefined });
+            }
+          },
         }
       );
     }
@@ -356,6 +375,7 @@ export default function Users() {
   const [activeTab, setActiveTab] = useState(initialTab === "pending" ? "pending" : "all");
   const { data: users, isLoading } = useListUsers();
   const { user } = useAuth();
+  const [maxUsersPerAdmin, setMaxUsersPerAdmin] = useState<number | null>(null);
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
@@ -363,6 +383,15 @@ export default function Users() {
       setActiveTab(tab);
     }
   }, [location]);
+
+  useEffect(() => {
+    if (user?.role === "admin") {
+      fetch("/api/privileges/limits", { credentials: "include" })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data?.maxUsersPerAdmin) setMaxUsersPerAdmin(data.maxUsersPerAdmin); })
+        .catch(() => {});
+    }
+  }, [user?.role]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | undefined>();
@@ -415,6 +444,11 @@ export default function Users() {
   const { t } = useLanguage();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
+  // Count non-superadmin active users for limit display
+  const activeUserCount = users?.filter((u) => u.role !== "superadmin").length ?? 0;
+  const isAtLimit = user?.role === "admin" && maxUsersPerAdmin !== null && activeUserCount >= maxUsersPerAdmin;
+  const isNearLimit = user?.role === "admin" && maxUsersPerAdmin !== null && !isAtLimit && activeUserCount >= maxUsersPerAdmin * 0.8;
+
   if (!isAdmin) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -462,11 +496,35 @@ export default function Users() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("users_title")}</h1>
           <p className="text-muted-foreground mt-1 text-lg">{t("users_subtitle")}</p>
         </div>
-        <Button className="gap-2" onClick={() => { setEditingUser(undefined); setDialogOpen(true); }} data-testid="add-user-btn">
+        <Button
+          className="gap-2"
+          onClick={() => { setEditingUser(undefined); setDialogOpen(true); }}
+          data-testid="add-user-btn"
+          disabled={isAtLimit}
+          title={isAtLimit && maxUsersPerAdmin !== null ? t("limit_user_reached", maxUsersPerAdmin) : undefined}
+        >
           <Plus className="h-4 w-4" />
           {t("users_add_btn")}
         </Button>
       </div>
+
+      {isAtLimit && maxUsersPerAdmin !== null && (
+        <Alert variant="destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertDescription>
+            {t("limit_user_reached", maxUsersPerAdmin)}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isNearLimit && maxUsersPerAdmin !== null && (
+        <Alert className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            {t("limit_user_near", activeUserCount, maxUsersPerAdmin)}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

@@ -263,6 +263,12 @@ export const en = {
   users_empty: "No users found.",
 
   // ── Privileges ───────────────────────────────────────
+  limit_user_reached: (limit: number) => `User limit reached. Your plan allows a maximum of ${limit} users.`,
+  limit_user_warning: (current: number, limit: number) => `${current} of ${limit} users used.`,
+  limit_user_near: (current: number, limit: number) => `Almost at limit: ${current} of ${limit} users used.`,
+  limit_file_too_large: (size: number, max: number) => `File is too large (${size} MB). Maximum allowed is ${max} MB.`,
+  limit_file_hint: (max: number) => `Maximum file size: ${max} MB`,
+
   nav_privileges: "Privileges",
   priv_title: "User Privileges",
   priv_subtitle: "Control role capabilities and system limits.",

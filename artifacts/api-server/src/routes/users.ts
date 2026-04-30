@@ -1,10 +1,20 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
-import { eq, or, ilike, and } from "drizzle-orm";
+import { usersTable, privilegesTable, defaultCapabilities } from "@workspace/db";
+import { eq, or, ilike, and, ne, count } from "drizzle-orm";
 import { requireAdminOrSuperAdmin, requireAuth } from "../middlewares/auth";
 import { z } from "zod";
+
+async function getPrivileges() {
+  const rows = await db.select().from(privilegesTable).limit(1);
+  if (rows.length > 0) return rows[0];
+  const inserted = await db
+    .insert(privilegesTable)
+    .values({ maxUsersPerAdmin: 50, maxUploadSizeMb: 10, roleCapabilities: defaultCapabilities })
+    .returning();
+  return inserted[0];
+}
 
 const router = Router();
 
@@ -102,6 +112,23 @@ router.post("/users", requireAdminOrSuperAdmin, async (req, res) => {
     if (!body.success) {
       res.status(400).json({ error: "Invalid body", details: body.error.flatten() });
       return;
+    }
+
+    // Enforce max-users-per-admin limit for admin callers (superadmin is exempt)
+    if (req.user!.role === "admin") {
+      const priv = await getPrivileges();
+      const [{ total }] = await db
+        .select({ total: count() })
+        .from(usersTable)
+        .where(and(ne(usersTable.role, "superadmin"), eq(usersTable.pendingApproval, false)));
+      if (Number(total) >= priv.maxUsersPerAdmin) {
+        res.status(429).json({
+          error: "user_limit_reached",
+          limit: priv.maxUsersPerAdmin,
+          current: Number(total),
+        });
+        return;
+      }
     }
 
     const { password, ...rest } = body.data;

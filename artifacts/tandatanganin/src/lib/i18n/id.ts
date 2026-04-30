@@ -265,6 +265,12 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   users_empty: "Tidak ada pengguna ditemukan.",
 
   // ── Privileges ───────────────────────────────────────
+  limit_user_reached: (limit: number) => `Batas pengguna tercapai. Paket Anda mengizinkan maksimal ${limit} pengguna.`,
+  limit_user_warning: (current: number, limit: number) => `${current} dari ${limit} pengguna digunakan.`,
+  limit_user_near: (current: number, limit: number) => `Hampir mencapai batas: ${current} dari ${limit} pengguna digunakan.`,
+  limit_file_too_large: (size: number, max: number) => `File terlalu besar (${size} MB). Maksimum yang diizinkan adalah ${max} MB.`,
+  limit_file_hint: (max: number) => `Ukuran file maksimum: ${max} MB`,
+
   nav_privileges: "Hak Akses",
   priv_title: "Hak Akses Pengguna",
   priv_subtitle: "Kelola kemampuan peran dan batas sistem.",

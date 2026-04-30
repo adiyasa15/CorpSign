@@ -11,6 +11,7 @@ import {
   documentAuditTable,
   documentCcTable,
   usersTable,
+  privilegesTable,
 } from "@workspace/db";
 import { eq, ilike, and, or, inArray } from "drizzle-orm";
 import {
@@ -100,7 +101,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // hard ceiling; dynamic check done post-upload
   fileFilter: (_req, file, cb) => {
     if (file.mimetype !== "application/pdf") {
       cb(new Error("Only PDF files are allowed"));
@@ -109,6 +110,16 @@ const upload = multer({
     }
   },
 });
+
+async function getMaxUploadBytes(): Promise<number> {
+  try {
+    const rows = await db.select({ maxUploadSizeMb: privilegesTable.maxUploadSizeMb }).from(privilegesTable).limit(1);
+    const mb = rows[0]?.maxUploadSizeMb ?? 10;
+    return mb * 1024 * 1024;
+  } catch {
+    return 10 * 1024 * 1024;
+  }
+}
 
 function canSeeAllDocs(role: string) {
   return role === "admin" || role === "superadmin";
@@ -212,6 +223,19 @@ router.post("/documents/upload", requireAuth, upload.single("file"), async (req,
     }
     if (!req.file) {
       res.status(400).json({ error: "PDF file is required" });
+      return;
+    }
+
+    // Enforce dynamic upload size limit from privileges
+    const maxBytes = await getMaxUploadBytes();
+    if (req.file.size > maxBytes) {
+      fs.unlinkSync(req.file.path);
+      const maxMb = Math.round(maxBytes / (1024 * 1024));
+      res.status(413).json({
+        error: "file_too_large",
+        maxMb,
+        fileSizeMb: +(req.file.size / (1024 * 1024)).toFixed(2),
+      });
       return;
     }
 
