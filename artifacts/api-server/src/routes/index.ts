@@ -8,6 +8,7 @@ import templatesRouter from "./templates";
 import signaturesRouter from "./signatures";
 import dashboardRouter from "./dashboard";
 import usersRouter from "./users";
+import privilegesRouter from "./privileges";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(templatesRouter);
 router.use(signaturesRouter);
 router.use(dashboardRouter);
 router.use(usersRouter);
+router.use(privilegesRouter);
 
 export default router;

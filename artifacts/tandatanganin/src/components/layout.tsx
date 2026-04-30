@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
   FileText, LayoutDashboard, PenTool, Settings, Users, LogOut,
-  PenLine, Upload, ChevronUp,
+  PenLine, Upload, ChevronUp, ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
@@ -40,6 +40,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   if (user?.role === "admin" || user?.role === "superadmin") {
     navItems.splice(3, 0, { name: t("nav_users"), href: "/users", icon: Users });
+  }
+
+  if (user?.role === "superadmin") {
+    navItems.splice(4, 0, { name: t("nav_privileges"), href: "/privileges", icon: ShieldCheck });
   }
 
   const getInitials = (name?: string) => {

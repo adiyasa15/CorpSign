@@ -19,6 +19,7 @@ import Signatures from "@/pages/signatures";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import Users from "@/pages/users";
+import Privileges from "@/pages/privileges";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +50,7 @@ function Router() {
                   <Route path="/settings" component={Settings} />
                   <Route path="/signature-settings" component={SignatureSettings} />
                   <Route path="/users" component={Users} />
+                  <Route path="/privileges" component={Privileges} />
                   <Route component={NotFound} />
                 </Switch>
               </Layout>
