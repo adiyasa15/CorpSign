@@ -370,8 +370,11 @@ export default function SignDocument() {
               Rejecting will stop the signing process for all parties. The document uploader and all signers/observers will be notified.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="px-1 pb-2">
-            <Label className="text-sm font-medium">Reason (optional)</Label>
+          <div className="px-1 pb-2 space-y-1.5">
+            <Label className="text-sm font-medium">
+              Reason <span className="text-destructive">*</span>
+              <span className="text-muted-foreground font-normal text-xs ml-1">(required — will be included in the notification email)</span>
+            </Label>
             <Textarea
               className="mt-1.5"
               placeholder="Explain why you are rejecting this document..."
@@ -379,12 +382,15 @@ export default function SignDocument() {
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
             />
+            {rejectReason.trim() === "" && (
+              <p className="text-xs text-destructive">Please provide a reason before rejecting.</p>
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={rejecting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={rejecting}
+              disabled={rejecting || rejectReason.trim() === ""}
               onClick={handleReject}
             >
               {rejecting ? "Rejecting..." : "Reject Document"}

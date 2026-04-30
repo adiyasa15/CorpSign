@@ -50,16 +50,14 @@ export default function Dashboard() {
           icon={XCircle}
           isLoading={isLoadingSummary}
         />
-        {isAdminOrAbove && (
-          <StatCard
-            title="Pending Approvals"
-            value={(summary as any)?.pendingApprovals}
-            icon={UserCheck}
-            isLoading={isLoadingSummary}
-            alert={!!(summary as any)?.pendingApprovals && (summary as any).pendingApprovals > 0}
-            onClick={() => setLocation("/users?tab=pending")}
-          />
-        )}
+        <StatCard
+          title="Pending Approvals"
+          value={(summary as any)?.pendingApprovals}
+          icon={UserCheck}
+          isLoading={isLoadingSummary}
+          alert={!!(summary as any)?.pendingApprovals && (summary as any).pendingApprovals > 0}
+          onClick={isAdminOrAbove ? () => setLocation("/users?tab=pending") : undefined}
+        />
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">

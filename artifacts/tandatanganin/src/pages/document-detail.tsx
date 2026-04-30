@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
-  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail,
+  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail, Ban,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { formatDate, formatBytes } from "@/lib/format";
@@ -111,6 +113,9 @@ export default function DocumentDetail() {
   const [downloading, setDownloading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -190,6 +195,30 @@ export default function DocumentDetail() {
     }
   }
 
+  async function handleVoid() {
+    setVoiding(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/void`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: voidReason.trim() || undefined }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error ?? "Failed to void document");
+      }
+      toast({ title: "Document voided", description: "All parties have been notified." });
+      setVoidOpen(false);
+      setVoidReason("");
+      loadDocument();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Failed to void", description: e.message });
+    } finally {
+      setVoiding(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6 max-w-5xl mx-auto space-y-4">
@@ -221,6 +250,7 @@ export default function DocumentDetail() {
   const isCC = doc.cc?.some((cc) => cc.email === user?.email);
   const isInvolved = isOwner || isAdmin || !!mySigner || isCC;
   const canEdit = (isOwner || isAdmin) && doc.status === "draft";
+  const canVoid = (isOwner || isAdmin) && doc.status === "in_progress";
   const canSign = !!mySigner && mySigner.status !== "completed" && doc.status === "in_progress";
   const canDownload = isInvolved && (doc.status === "completed" || doc.status === "signed");
   const myFields = doc.fields.filter((f) => f.signerId === mySigner?.id);
@@ -251,6 +281,17 @@ export default function DocumentDetail() {
                 <Trash2 className="h-4 w-4 mr-1.5" /> Delete
               </Button>
             </>
+          )}
+
+          {canVoid && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/50 hover:bg-destructive/10"
+              onClick={() => { setVoidReason(""); setVoidOpen(true); }}
+            >
+              <Ban className="h-4 w-4 mr-1.5" /> Void
+            </Button>
           )}
 
           {canSign && (
@@ -424,6 +465,38 @@ export default function DocumentDetail() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={voidOpen} onOpenChange={(open) => { if (!open) setVoidOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-destructive" /> Void this document?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Voiding will permanently stop the signing process. All signers and observers will be notified. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 pb-2 space-y-1.5">
+            <Label className="text-sm font-medium">Reason <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Textarea
+              placeholder="Explain why this document is being voided..."
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={voiding}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={voiding}
+              onClick={handleVoid}
+            >
+              {voiding ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Voiding...</> : <><Ban className="h-4 w-4 mr-2" />Void Document</>}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

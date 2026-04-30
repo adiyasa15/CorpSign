@@ -253,11 +253,15 @@ export async function notifyDocumentRejected(opts: {
   const rejectHtml = baseLayout("Reject", `
     <h2 style="margin:0 0 8px;font-size:20px;color:#111">Document Rejected</h2>
     <p style="margin:0 0 16px;color:#6b7280;font-size:14px"><strong>${rejectedByName}</strong> has rejected this document.</p>
-    <table cellpadding="0" cellspacing="0" style="width:100%;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:8px">
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:${reason ? "12px" : "8px"}">
       <tr><td style="font-size:13px;color:#991b1b"><strong>Document:</strong> ${docTitle}</td></tr>
       <tr><td style="font-size:13px;color:#991b1b;padding-top:6px"><strong>Rejected by:</strong> ${rejectedByName}</td></tr>
-      ${reason ? `<tr><td style="font-size:13px;color:#991b1b;padding-top:6px"><strong>Reason:</strong> ${reason}</td></tr>` : ""}
     </table>
+    ${reason ? `
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #ea580c;border-radius:8px;padding:16px;margin-bottom:8px">
+      <tr><td style="font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;padding-bottom:6px">Rejection Reason</td></tr>
+      <tr><td style="font-size:14px;color:#7c2d12;line-height:1.6">${reason}</td></tr>
+    </table>` : ""}
     ${btn("View Document", link, "#dc2626")}
   `);
 
