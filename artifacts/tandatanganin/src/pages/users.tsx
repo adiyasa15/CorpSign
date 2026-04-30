@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { UserProfile } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -411,6 +412,7 @@ export default function Users() {
     }
   };
 
+  const { t } = useLanguage();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   if (!isAdmin) {
@@ -457,21 +459,21 @@ export default function Users() {
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">User Management</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Manage team members and their roles.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("users_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-lg">{t("users_subtitle")}</p>
         </div>
         <Button className="gap-2" onClick={() => { setEditingUser(undefined); setDialogOpen(true); }} data-testid="add-user-btn">
           <Plus className="h-4 w-4" />
-          Add User
+          {t("users_add_btn")}
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">All Users</TabsTrigger>
+          <TabsTrigger value="all">{t("users_tab_all")}</TabsTrigger>
           <TabsTrigger value="pending" className="gap-2">
             <Clock className="h-3.5 w-3.5" />
-            Pending Approvals
+            {t("users_tab_pending")}
             {pendingUsers && pendingUsers.length > 0 && (
               <Badge className="ml-1 h-4 min-w-4 px-1 text-[10px] bg-amber-500 hover:bg-amber-500 border-none">{pendingUsers.length}</Badge>
             )}
@@ -483,7 +485,7 @@ export default function Users() {
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search users..."
+                placeholder={t("users_search_placeholder")}
                 className="pl-9 w-full bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -495,12 +497,12 @@ export default function Users() {
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("users_col_name")}</TableHead>
+                  <TableHead>{t("users_col_role")}</TableHead>
+                  <TableHead>{t("users_col_status")}</TableHead>
                   <TableHead>Organization</TableHead>
                   <TableHead>SSO</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right">{t("users_col_actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -648,7 +650,7 @@ export default function Users() {
                             data-testid={`approve-user-${u.id}`}
                           >
                             <CheckCircle className="h-3.5 w-3.5" />
-                            Approve
+                            {t("users_approve")}
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -660,7 +662,7 @@ export default function Users() {
                                 data-testid={`reject-user-${u.id}`}
                               >
                                 <XCircle className="h-3.5 w-3.5" />
-                                Reject
+                                {t("users_reject")}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>

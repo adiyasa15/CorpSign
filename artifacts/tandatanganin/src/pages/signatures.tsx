@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, PenLine, Fingerprint, Stamp, Loader2, Upload, X, Star } from "lucide-react";
 import DrawingPad, { DrawingPadHandle } from "@/components/signature-pad";
+import { useLanguage } from "@/contexts/language-context";
 
 interface Template {
   id: number;
@@ -33,6 +34,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 export default function Signatures() {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -96,11 +98,11 @@ export default function Signatures() {
     <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Signatures</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Manage your saved signature profiles.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("sigs_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-lg">{t("sigs_subtitle")}</p>
         </div>
         <Button className="gap-2 shadow-sm" onClick={() => setShowAdd(true)}>
-          <Plus className="h-4 w-4" /> Add Signature
+          <Plus className="h-4 w-4" /> {t("sigs_add_btn")}
         </Button>
       </div>
 
@@ -111,12 +113,12 @@ export default function Signatures() {
       ) : templates.length === 0 ? (
         <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-card border border-dashed border-border rounded-lg">
           <PenLine className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
-          <h3 className="text-xl font-bold text-foreground">No signatures yet</h3>
+          <h3 className="text-xl font-bold text-foreground">{t("sigs_empty_title")}</h3>
           <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
-            Create a saved signature profile to quickly sign documents without drawing it every time.
+            {t("sigs_empty_desc")}
           </p>
           <Button onClick={() => setShowAdd(true)} className="gap-2">
-            <Plus className="h-4 w-4" /> Create First Signature
+            <Plus className="h-4 w-4" /> {t("sigs_add_btn")}
           </Button>
         </div>
       ) : (
@@ -132,7 +134,7 @@ export default function Signatures() {
                   </div>
                   {tpl.isDefault && (
                     <Badge className="text-[10px] px-1.5 py-0">
-                      <Star className="h-2.5 w-2.5 mr-0.5" /> Default
+                      <Star className="h-2.5 w-2.5 mr-0.5" /> {t("sigs_default_badge")}
                     </Badge>
                   )}
                 </div>
@@ -146,7 +148,7 @@ export default function Signatures() {
                 <CardFooter className="flex justify-between items-center border-t border-border pt-3 mt-3 pb-3 px-4 gap-2">
                   {!tpl.isDefault && (
                     <Button variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={() => setAsDefault(tpl)}>
-                      <Star className="h-3 w-3" /> Set Default
+                      <Star className="h-3 w-3" /> {t("sigs_set_default")}
                     </Button>
                   )}
                   {tpl.isDefault && <div />}

@@ -56,12 +56,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function Documents() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "signed" | "rejected">("all");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -105,12 +107,12 @@ export default function Documents() {
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Documents</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Manage and track your document signing requests.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("documents_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-lg">{t("documents_subtitle")}</p>
         </div>
         {!isApprover && (
           <Button onClick={() => setLocation("/documents/upload")}>
-            <Plus className="h-4 w-4 mr-2" /> Upload Document
+            <Plus className="h-4 w-4 mr-2" /> {t("documents_upload_btn")}
           </Button>
         )}
       </div>
@@ -118,8 +120,8 @@ export default function Documents() {
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-card p-4 rounded-lg border border-border shadow-sm">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search documents by title or signer..." 
+          <Input
+            placeholder={t("documents_search_placeholder")}
             className="pl-9 w-full bg-background"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -127,13 +129,13 @@ export default function Documents() {
         </div>
         <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
           <SelectTrigger className="w-full sm:w-[180px] bg-background">
-            <SelectValue placeholder="Filter by status" />
+            <SelectValue placeholder={t("documents_filter_status")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Documents</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="signed">Signed</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="all">{t("status_all")}</SelectItem>
+            <SelectItem value="pending">{t("status_pending")}</SelectItem>
+            <SelectItem value="signed">{t("status_signed")}</SelectItem>
+            <SelectItem value="rejected">{t("status_rejected")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -142,11 +144,11 @@ export default function Documents() {
         <Table>
           <TableHeader className="bg-secondary/50">
             <TableRow>
-              <TableHead className="w-[300px]">Document</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Signer</TableHead>
-              <TableHead>Date Added</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-[300px]">{t("documents_col_title")}</TableHead>
+              <TableHead>{t("documents_col_status")}</TableHead>
+              <TableHead>{t("documents_col_signers")}</TableHead>
+              <TableHead>{t("documents_col_uploaded")}</TableHead>
+              <TableHead className="text-right">{t("documents_col_actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -198,15 +200,14 @@ export default function Documents() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/documents/${doc.id}`); }} data-testid={`view-doc-${doc.id}`}>
-                            View Details
+                            {t("documents_view")}
                           </DropdownMenuItem>
                           {isApprover && doc.status === "signed" && doc.signatureData && (
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(doc.signatureData!, "_blank"); }} data-testid={`download-doc-${doc.id}`}>
                               <Download className="mr-2 h-4 w-4" />
-                              Download
+                              {t("download")}
                             </DropdownMenuItem>
                           )}
-                          {/* Void — only uploader on active docs */}
                           {(["draft", "in_progress"] as string[]).includes(doc.status) && (
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
@@ -214,7 +215,7 @@ export default function Documents() {
                               data-testid={`void-doc-${doc.id}`}
                             >
                               <Ban className="mr-2 h-4 w-4" />
-                              Void Document
+                              {t("doc_void")}
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -228,8 +229,8 @@ export default function Documents() {
                 <TableCell colSpan={5} className="h-64 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <FileText className="h-12 w-12 mb-4 opacity-20" />
-                    <p className="text-lg font-medium text-foreground">No documents found</p>
-                    <p className="text-sm mt-1">Adjust your filters or upload a new document.</p>
+                    <p className="text-lg font-medium text-foreground">{t("documents_empty_title")}</p>
+                    <p className="text-sm mt-1">{t("documents_empty_filtered")}</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -243,30 +244,30 @@ export default function Documents() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Ban className="h-5 w-5 text-destructive" /> Void Document?
+              <Ban className="h-5 w-5 text-destructive" /> {t("doc_void_title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently void <strong>{voidTarget?.title}</strong>. All signers and observers will be notified. This action cannot be undone.
+              {t("doc_void_desc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-1 pb-2">
-            <Label className="text-sm font-medium">Reason (optional)</Label>
+            <Label className="text-sm font-medium">{t("doc_void_reason_label")}</Label>
             <Textarea
               className="mt-1.5"
-              placeholder="Explain why this document is being voided..."
+              placeholder={t("doc_void_reason_placeholder")}
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}
               rows={3}
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={voiding}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={voiding}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               disabled={voiding}
               onClick={handleVoid}
             >
-              {voiding ? "Voiding..." : "Void Document"}
+              {voiding ? t("doc_voiding") : t("doc_void_btn")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -276,19 +277,22 @@ export default function Documents() {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useLanguage();
   switch (status) {
     case "draft":
-      return <Badge variant="secondary" className="gap-1">Draft</Badge>;
+      return <Badge variant="secondary" className="gap-1">{t("status_draft")}</Badge>;
     case "pending":
-      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900/50 gap-1"><Clock className="h-3 w-3" /> Pending</Badge>;
+      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-900/50 gap-1"><Clock className="h-3 w-3" /> {t("status_pending")}</Badge>;
     case "in_progress":
-      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50 gap-1"><Clock className="h-3 w-3" /> In Progress</Badge>;
+      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50 gap-1"><Clock className="h-3 w-3" /> {t("status_in_progress")}</Badge>;
     case "signed":
-      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> Signed</Badge>;
+      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> {t("status_signed")}</Badge>;
     case "completed":
-      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> Completed</Badge>;
+      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> {t("status_completed")}</Badge>;
     case "rejected":
-      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50 gap-1"><XCircle className="h-3 w-3" /> Rejected</Badge>;
+      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50 gap-1"><XCircle className="h-3 w-3" /> {t("status_rejected")}</Badge>;
+    case "voided":
+      return <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700 gap-1"><XCircle className="h-3 w-3" /> {t("status_voided")}</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }

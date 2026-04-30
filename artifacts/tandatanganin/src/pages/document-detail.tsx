@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import { formatDate, formatBytes } from "@/lib/format";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -79,21 +80,29 @@ interface AuditEntry {
   createdAt: string;
 }
 
-const STATUS_BADGE: Record<string, React.ReactNode> = {
-  draft: <Badge variant="secondary" className="gap-1.5"><Clock className="h-3.5 w-3.5" />Draft</Badge>,
-  pending: <Badge className="gap-1.5 bg-yellow-500 hover:bg-yellow-600"><Clock className="h-3.5 w-3.5" />Pending</Badge>,
-  in_progress: <Badge className="gap-1.5 bg-blue-500 hover:bg-blue-600"><PenLine className="h-3.5 w-3.5" />In Progress</Badge>,
-  signed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Signed</Badge>,
-  completed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Completed</Badge>,
-  rejected: <Badge variant="destructive" className="gap-1.5"><XCircle className="h-3.5 w-3.5" />Rejected</Badge>,
-  voided: <Badge variant="outline" className="gap-1.5 text-muted-foreground border-muted-foreground/50"><Ban className="h-3.5 w-3.5" />Voided</Badge>,
-};
+type TFn = (key: string, ...args: any[]) => string;
 
-const SIGNER_STATUS_BADGE: Record<string, React.ReactNode> = {
-  completed: <Badge className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" />Signed</Badge>,
-  rejected: <Badge variant="destructive" className="text-xs gap-1"><XCircle className="h-3 w-3" />Rejected</Badge>,
-  pending: <Badge variant="secondary" className="text-xs">Pending</Badge>,
-};
+function getStatusBadge(status: string, t: TFn): React.ReactNode {
+  switch (status) {
+    case "draft": return <Badge variant="secondary" className="gap-1.5"><Clock className="h-3.5 w-3.5" />{t("status_draft")}</Badge>;
+    case "pending": return <Badge className="gap-1.5 bg-yellow-500 hover:bg-yellow-600"><Clock className="h-3.5 w-3.5" />{t("status_pending")}</Badge>;
+    case "in_progress": return <Badge className="gap-1.5 bg-blue-500 hover:bg-blue-600"><PenLine className="h-3.5 w-3.5" />{t("status_in_progress")}</Badge>;
+    case "signed": return <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{t("status_signed")}</Badge>;
+    case "completed": return <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{t("status_completed")}</Badge>;
+    case "rejected": return <Badge variant="destructive" className="gap-1.5"><XCircle className="h-3.5 w-3.5" />{t("status_rejected")}</Badge>;
+    case "voided": return <Badge variant="outline" className="gap-1.5 text-muted-foreground border-muted-foreground/50"><Ban className="h-3.5 w-3.5" />{t("status_voided")}</Badge>;
+    default: return <Badge variant="secondary">{status}</Badge>;
+  }
+}
+
+function getSignerStatusBadge(status: string, t: TFn): React.ReactNode {
+  switch (status) {
+    case "completed": return <Badge className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" />{t("doc_signer_signed")}</Badge>;
+    case "rejected": return <Badge variant="destructive" className="text-xs gap-1"><XCircle className="h-3 w-3" />{t("doc_signer_rejected")}</Badge>;
+    case "pending": return <Badge variant="secondary" className="text-xs">{t("doc_signer_pending")}</Badge>;
+    default: return <Badge variant="secondary" className="text-xs capitalize">{status}</Badge>;
+  }
+}
 
 const EVENT_LABELS: Record<string, string> = {
   uploaded: "Document uploaded",
@@ -111,6 +120,7 @@ export default function DocumentDetail() {
   const docId = parseInt(params?.id || "0", 10);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
@@ -266,7 +276,7 @@ export default function DocumentDetail() {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <Button variant="ghost" size="sm" onClick={() => setLocation("/documents")} className="-ml-2">
-        <ArrowLeft className="h-4 w-4 mr-1" /> Back to Documents
+        <ArrowLeft className="h-4 w-4 mr-1" /> {t("doc_back")}
       </Button>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -277,15 +287,15 @@ export default function DocumentDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {STATUS_BADGE[doc.status] ?? <Badge variant="secondary">{doc.status}</Badge>}
+          {getStatusBadge(doc.status, t)}
 
           {canEdit && (
             <>
               <Button size="sm" variant="outline" onClick={() => setLocation(`/documents/${docId}/editor`)}>
-                <Edit2 className="h-4 w-4 mr-1.5" /> Edit Fields
+                <Edit2 className="h-4 w-4 mr-1.5" /> {t("doc_edit")}
               </Button>
               <Button size="sm" variant="outline" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+                <Trash2 className="h-4 w-4 mr-1.5" /> {t("delete")}
               </Button>
             </>
           )}
@@ -297,14 +307,14 @@ export default function DocumentDetail() {
               className="text-destructive border-destructive/50 hover:bg-destructive/10"
               onClick={() => { setVoidReason(""); setVoidOpen(true); }}
             >
-              <Ban className="h-4 w-4 mr-1.5" /> Void
+              <Ban className="h-4 w-4 mr-1.5" /> {t("doc_void")}
             </Button>
           )}
 
           {canSign && (
             <Button size="sm" onClick={() => setLocation(`/documents/${docId}/sign`)}>
               <PenLine className="h-4 w-4 mr-1.5" />
-              Sign Now {myUnfilledFields.length > 0 ? `(${myUnfilledFields.length} left)` : ""}
+              {t("doc_sign")} {myUnfilledFields.length > 0 ? `(${myUnfilledFields.length} left)` : ""}
             </Button>
           )}
 
@@ -313,7 +323,7 @@ export default function DocumentDetail() {
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={downloading}>
                   {downloading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Download className="h-4 w-4 mr-1.5" />}
-                  Download <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                  {t("download")} <ChevronDown className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -408,7 +418,7 @@ export default function DocumentDetail() {
                           <p className="text-xs text-green-600">{formatDate(s.completedAt)}</p>
                         )}
                       </div>
-                      {SIGNER_STATUS_BADGE[s.status] ?? <Badge variant="secondary" className="text-xs capitalize">{s.status}</Badge>}
+                      {getSignerStatusBadge(s.status, t)}
                     </div>
                   ))}
                 </div>
@@ -475,29 +485,29 @@ export default function DocumentDetail() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Ban className="h-5 w-5 text-destructive" /> Void this document?
+              <Ban className="h-5 w-5 text-destructive" /> {t("doc_void_title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Voiding will permanently stop the signing process. All signers and observers will be notified. This cannot be undone.
+              {t("doc_void_desc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-1 pb-2 space-y-1.5">
-            <Label className="text-sm font-medium">Reason <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Label className="text-sm font-medium">{t("doc_void_reason_label")}</Label>
             <Textarea
-              placeholder="Explain why this document is being voided..."
+              placeholder={t("doc_void_reason_placeholder")}
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}
               rows={3}
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={voiding}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={voiding}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               disabled={voiding}
               onClick={handleVoid}
             >
-              {voiding ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Voiding...</> : <><Ban className="h-4 w-4 mr-2" />Void Document</>}
+              {voiding ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />{t("doc_voiding")}</> : <><Ban className="h-4 w-4 mr-2" />{t("doc_void_btn")}</>}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

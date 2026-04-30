@@ -8,10 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Upload, X, ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function UploadDocument() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -77,11 +79,11 @@ export default function UploadDocument() {
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/documents")}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t("back")}
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Upload Document</h1>
-          <p className="text-muted-foreground text-sm">Upload a PDF to prepare for signing</p>
+          <h1 className="text-2xl font-bold">{t("upload_title")}</h1>
+          <p className="text-muted-foreground text-sm">{t("upload_subtitle")}</p>
         </div>
       </div>
 
@@ -130,31 +132,31 @@ export default function UploadDocument() {
                     <Upload className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="font-medium">Drag & drop your PDF here</p>
-                    <p className="text-sm text-muted-foreground">or click to browse — PDF files only, max 50MB</p>
+                    <p className="font-medium">{t("upload_drop_title")}</p>
+                    <p className="text-sm text-muted-foreground">{t("upload_drop_subtitle")} — {t("upload_drop_hint")}</p>
                   </div>
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="title">Document Title <span className="text-destructive">*</span></Label>
+              <Label htmlFor="title">{t("upload_doc_title")} <span className="text-destructive">*</span></Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Service Agreement Q1 2025"
+                placeholder={t("upload_doc_title_placeholder")}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
+              <Label htmlFor="description">{t("upload_doc_desc")}</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add context about this document..."
+                placeholder={t("upload_doc_desc_placeholder")}
                 rows={3}
               />
             </div>
@@ -165,9 +167,9 @@ export default function UploadDocument() {
               disabled={!file || !title.trim() || uploading}
             >
               {uploading ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</>
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("upload_uploading")}</>
               ) : (
-                <><Upload className="h-4 w-4 mr-2" /> Upload & Continue</>
+                <><Upload className="h-4 w-4 mr-2" /> {t("upload_btn")}</>
               )}
             </Button>
           </form>

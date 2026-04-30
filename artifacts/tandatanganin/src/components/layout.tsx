@@ -5,6 +5,7 @@ import {
   PenLine, Upload, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { useLanguage } from "@/contexts/language-context";
 import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const logoutMutation = useLogout();
   const queryClient = useQueryClient();
 
@@ -30,14 +32,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Documents", href: "/documents", icon: FileText },
-    { name: "Signatures", href: "/signatures", icon: PenTool },
-    { name: "Settings", href: "/settings", icon: Settings },
+    { name: t("nav_dashboard"), href: "/", icon: LayoutDashboard },
+    { name: t("nav_documents"), href: "/documents", icon: FileText },
+    { name: t("nav_signatures"), href: "/signatures", icon: PenTool },
+    { name: t("nav_settings"), href: "/settings", icon: Settings },
   ];
 
   if (user?.role === "admin" || user?.role === "superadmin") {
-    navItems.splice(3, 0, { name: "User Management", href: "/users", icon: Users });
+    navItems.splice(3, 0, { name: t("nav_users"), href: "/users", icon: Users });
   }
 
   const getInitials = (name?: string) => {
@@ -57,7 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4 px-2">
-            Menu
+            {t("nav_menu")}
           </div>
           {navItems.map((item) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
@@ -81,7 +83,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {user?.role !== "approver" && (
             <div className="pt-4">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
-                Quick Actions
+                {t("nav_quick_actions")}
               </div>
               <Link
                 href="/documents/upload"
@@ -93,7 +95,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <Upload className="h-4 w-4" />
-                Upload Document
+                {t("nav_upload")}
               </Link>
             </div>
           )}
@@ -115,7 +117,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56">
               <div className="px-2 py-1.5">
-                <p className="text-xs text-muted-foreground">Signed in as</p>
+                <p className="text-xs text-muted-foreground">{t("nav_signed_in_as")}</p>
                 <p className="text-sm font-medium truncate">{user?.email}</p>
                 <Badge variant="outline" className="capitalize text-xs font-normal mt-1">
                   {user?.role ?? "user"}
@@ -124,11 +126,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setLocation("/signature-settings")}>
                 <PenLine className="h-4 w-4 mr-2" />
-                Signature Settings
+                {t("nav_signature_settings")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setLocation("/settings")}>
                 <Settings className="h-4 w-4 mr-2" />
-                Account Settings
+                {t("nav_account_settings")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -137,7 +139,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 data-testid="logout-btn"
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                Log Out
+                {t("nav_logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
