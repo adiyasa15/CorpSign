@@ -86,6 +86,13 @@ const STATUS_BADGE: Record<string, React.ReactNode> = {
   signed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Signed</Badge>,
   completed: <Badge className="gap-1.5 bg-green-500 hover:bg-green-600"><CheckCircle2 className="h-3.5 w-3.5" />Completed</Badge>,
   rejected: <Badge variant="destructive" className="gap-1.5"><XCircle className="h-3.5 w-3.5" />Rejected</Badge>,
+  voided: <Badge variant="outline" className="gap-1.5 text-muted-foreground border-muted-foreground/50"><Ban className="h-3.5 w-3.5" />Voided</Badge>,
+};
+
+const SIGNER_STATUS_BADGE: Record<string, React.ReactNode> = {
+  completed: <Badge className="text-xs gap-1"><CheckCircle2 className="h-3 w-3" />Signed</Badge>,
+  rejected: <Badge variant="destructive" className="text-xs gap-1"><XCircle className="h-3 w-3" />Rejected</Badge>,
+  pending: <Badge variant="secondary" className="text-xs">Pending</Badge>,
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -250,7 +257,7 @@ export default function DocumentDetail() {
   const isCC = doc.cc?.some((cc) => cc.email === user?.email);
   const isInvolved = isOwner || isAdmin || !!mySigner || isCC;
   const canEdit = (isOwner || isAdmin) && doc.status === "draft";
-  const canVoid = (isOwner || isAdmin) && doc.status === "in_progress";
+  const canVoid = (isOwner || isAdmin) && ["draft", "pending", "in_progress"].includes(doc.status);
   const canSign = !!mySigner && mySigner.status !== "completed" && doc.status === "in_progress";
   const canDownload = isInvolved && (doc.status === "completed" || doc.status === "signed");
   const myFields = doc.fields.filter((f) => f.signerId === mySigner?.id);
@@ -401,9 +408,7 @@ export default function DocumentDetail() {
                           <p className="text-xs text-green-600">{formatDate(s.completedAt)}</p>
                         )}
                       </div>
-                      <Badge variant={s.status === "completed" ? "default" : "secondary"} className="text-xs">
-                        {s.status === "completed" ? "Signed" : "Pending"}
-                      </Badge>
+                      {SIGNER_STATUS_BADGE[s.status] ?? <Badge variant="secondary" className="text-xs capitalize">{s.status}</Badge>}
                     </div>
                   ))}
                 </div>

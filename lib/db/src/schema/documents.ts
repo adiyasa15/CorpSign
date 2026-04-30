@@ -2,7 +2,7 @@ import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const documentStatusEnum = pgEnum("document_status", ["pending", "signed", "rejected", "in_progress", "completed", "draft"]);
+export const documentStatusEnum = pgEnum("document_status", ["pending", "signed", "rejected", "in_progress", "completed", "draft", "voided"]);
 
 export const documentsTable = pgTable("documents", {
   id: serial("id").primaryKey(),

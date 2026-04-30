@@ -768,12 +768,12 @@ router.post("/documents/:id/void", requireAuth, async (req, res) => {
       res.status(403).json({ error: "Only the document uploader can void this document" }); return;
     }
 
-    // Can void if in_progress or draft
-    if (!["draft", "in_progress"].includes(doc.status)) {
-      res.status(400).json({ error: "Only draft or in-progress documents can be voided" }); return;
+    // Cannot void what's already voided, rejected, or completed
+    if (["voided", "rejected", "completed", "signed"].includes(doc.status)) {
+      res.status(400).json({ error: "This document cannot be voided in its current state" }); return;
     }
 
-    await db.update(documentsTable).set({ status: "rejected", updatedAt: new Date() }).where(eq(documentsTable.id, docId));
+    await db.update(documentsTable).set({ status: "voided", updatedAt: new Date() }).where(eq(documentsTable.id, docId));
     await logAudit(docId, user.id, user.name, user.email, req.ip, "voided", { reason });
 
     // Notify
@@ -817,6 +817,12 @@ router.post("/documents/:id/reject", requireAuth, async (req, res) => {
     }
 
     await db.update(documentsTable).set({ status: "rejected", updatedAt: new Date() }).where(eq(documentsTable.id, docId));
+    // Mark the rejecting signer's individual status as "rejected"
+    if (signer) {
+      await db.update(documentSignersTable)
+        .set({ status: "rejected" })
+        .where(eq(documentSignersTable.id, signer.id));
+    }
     await logAudit(docId, user.id, user.name, user.email, req.ip, "rejected", { reason });
 
     // Notify
