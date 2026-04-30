@@ -129,6 +129,15 @@ export default function DocumentEditor() {
     loadDocument();
   }, [docId]);
 
+  // Escape key cancels active placement tool
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveTool(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   async function loadDocument() {
     try {
       const [docRes, signersRes, fieldsRes, ccRes] = await Promise.all([
@@ -197,6 +206,8 @@ export default function DocumentEditor() {
       if (!res.ok) throw new Error("Failed to add field");
       const field = await res.json() as Field;
       setFields((prev) => [...prev, field]);
+      // Auto-exit placement mode so the user can immediately drag/resize the placed field
+      setActiveTool(null);
     } catch {
       toast({ variant: "destructive", title: "Failed to place field" });
     }
@@ -228,7 +239,6 @@ export default function DocumentEditor() {
   }, [docId]);
 
   const startDrag = useCallback((e: React.PointerEvent, field: Field) => {
-    if (activeTool) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const state: InteractState = {
@@ -245,7 +255,6 @@ export default function DocumentEditor() {
   }, [activeTool]);
 
   const startResize = useCallback((e: React.PointerEvent, field: Field) => {
-    if (activeTool) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const state: InteractState = {
@@ -559,13 +568,20 @@ export default function DocumentEditor() {
                       {activeTool === type && <Badge className="ml-auto text-[10px] px-1 py-0">Placing</Badge>}
                     </Button>
                   ))}
-                  {activeTool && (
-                    <p className="text-xs text-primary mt-1">
-                      Click the document to place a {activeTool} for <strong>{activeSigner?.name}</strong>
-                    </p>
-                  )}
-                  {!activeTool && fields.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">Drag fields to move · drag corner to resize</p>
+                  {activeTool ? (
+                    <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-2 space-y-0.5">
+                      <p className="text-xs text-primary font-medium">
+                        Click anywhere on the document to place a <strong>{activeTool}</strong> box for <strong>{activeSigner?.name}</strong>
+                      </p>
+                      <p className="text-xs text-muted-foreground">Press <kbd className="bg-muted border rounded px-1 text-[10px]">Esc</kbd> or click the button again to cancel</p>
+                    </div>
+                  ) : (
+                    fields.length > 0 && (
+                      <div className="mt-2 rounded-md bg-muted px-2.5 py-2 space-y-0.5">
+                        <p className="text-xs text-muted-foreground font-medium">Select mode</p>
+                        <p className="text-xs text-muted-foreground">Drag a box to move it · hover and drag the corner triangle to resize</p>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -677,9 +693,9 @@ export default function DocumentEditor() {
                   return (
                     <div
                       key={field.id}
-                      className={`absolute group border-2 rounded flex items-center justify-center ${
-                        activeTool ? "pointer-events-none" : "cursor-move"
-                      } ${isInteracting ? "opacity-90 shadow-lg z-10" : ""}`}
+                      className={`absolute group border-2 rounded flex items-center justify-center cursor-move ${
+                        isInteracting ? "opacity-90 shadow-lg z-10" : "hover:brightness-95"
+                      }`}
                       style={{
                         left: `${field.x}%`, top: `${field.y}%`,
                         width: `${field.width}%`, height: `${field.height}%`,
@@ -707,13 +723,12 @@ export default function DocumentEditor() {
                         <X className="h-3 w-3" />
                       </button>
 
-                      {/* Resize handle (bottom-right) */}
+                      {/* Resize handle (bottom-right) — larger for easier grabbing */}
                       <div
-                        className="absolute bottom-0 right-0 w-3.5 h-3.5 cursor-se-resize z-20"
+                        className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize z-20 opacity-0 group-hover:opacity-100 transition-opacity"
                         style={{
                           background: color,
                           clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
-                          opacity: 0.8,
                         }}
                         onPointerDown={(e) => { e.stopPropagation(); startResize(e, field); }}
                         onClick={(e) => e.stopPropagation()}
