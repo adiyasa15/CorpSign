@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { documentsTable, signaturesTable, activityTable } from "@workspace/db";
+import { documentsTable, signaturesTable, activityTable, usersTable } from "@workspace/db";
 import { and, eq, gte, sql } from "drizzle-orm";
 
 const router = Router();
@@ -29,6 +29,11 @@ router.get("/dashboard/summary", async (req, res) => {
       .from(activityTable)
       .where(and(eq(activityTable.action, "signed"), gte(activityTable.timestamp, thisMonth)));
 
+    const [pendingApprovals] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(usersTable)
+      .where(eq(usersTable.pendingApproval, true));
+
     res.json({
       totalDocuments: totals.total,
       pendingDocuments: totals.pending,
@@ -36,6 +41,7 @@ router.get("/dashboard/summary", async (req, res) => {
       rejectedDocuments: totals.rejected,
       totalSignatures: sigTotal.total,
       signaturesThisMonth: sigMonth.total,
+      pendingApprovals: pendingApprovals.total,
     });
   } catch (err) {
     req.log.error(err);

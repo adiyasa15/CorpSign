@@ -1,13 +1,17 @@
 import { useGetDashboardSummary, useGetRecentActivity } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, Clock, CheckCircle, XCircle, Activity, ChevronRight } from "lucide-react";
-import { Link } from "wouter";
+import { FileText, Clock, CheckCircle, XCircle, Activity, ChevronRight, UserCheck } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { formatDate } from "@/lib/format";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary();
   const { data: activities, isLoading: isLoadingActivity } = useGetRecentActivity();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const isAdminOrAbove = user?.role === "admin" || user?.role === "superadmin";
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -44,6 +48,16 @@ export default function Dashboard() {
           icon={XCircle}
           isLoading={isLoadingSummary}
         />
+        {isAdminOrAbove && (
+          <StatCard
+            title="Pending Approvals"
+            value={(summary as any)?.pendingApprovals}
+            icon={UserCheck}
+            isLoading={isLoadingSummary}
+            alert={!!(summary as any)?.pendingApprovals && (summary as any).pendingApprovals > 0}
+            onClick={() => setLocation("/users?tab=pending")}
+          />
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
@@ -123,27 +137,35 @@ function StatCard({
   value, 
   icon: Icon, 
   isLoading,
-  alert
+  alert,
+  onClick,
 }: { 
   title: string; 
   value?: number; 
   icon: React.ElementType; 
   isLoading: boolean;
   alert?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
+    <Card
+      className={`shadow-sm transition-shadow ${onClick ? "cursor-pointer hover:shadow-md hover:ring-2 hover:ring-primary/20" : "hover:shadow-md"}`}
+      onClick={onClick}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className={`h-4 w-4 ${alert ? 'text-destructive' : 'text-muted-foreground'}`} />
+        <Icon className={`h-4 w-4 ${alert ? 'text-amber-500' : 'text-muted-foreground'}`} />
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-8 w-16 mt-1" />
         ) : (
-          <div className="text-3xl font-bold">{value || 0}</div>
+          <div className={`text-3xl font-bold ${alert ? 'text-amber-600 dark:text-amber-400' : ''}`}>{value ?? 0}</div>
+        )}
+        {onClick && !isLoading && (
+          <p className="text-xs text-muted-foreground mt-1">Click to view →</p>
         )}
       </CardContent>
     </Card>

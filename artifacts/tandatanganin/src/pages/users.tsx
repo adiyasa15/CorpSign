@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useListUsers,
@@ -349,9 +350,19 @@ interface PendingUser {
 
 export default function Users() {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
+  const [location] = useLocation();
+  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  const [activeTab, setActiveTab] = useState(initialTab === "pending" ? "pending" : "all");
   const { data: users, isLoading } = useListUsers();
   const { user } = useAuth();
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab === "pending" || tab === "all") {
+      setActiveTab(tab);
+    }
+  }, [location]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | undefined>();
   const queryClient = useQueryClient();
