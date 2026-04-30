@@ -1,39 +1,95 @@
-import { useState } from "react";
-import { 
-  useListSignatures,
-  useCreateSignature,
-  useDeleteSignature,
-  getListSignaturesQueryKey
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter as DFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, PenTool, Type, Upload } from "lucide-react";
-import { SignaturePad } from "@/components/signature-pad";
-import { formatDate } from "@/lib/format";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Trash2, PenLine, Fingerprint, Stamp, Loader2, Upload, X, Star } from "lucide-react";
+import DrawingPad, { DrawingPadHandle } from "@/components/signature-pad";
+
+interface Template {
+  id: number;
+  templateType: string;
+  name: string | null;
+  imageData: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  signature: "Signature Template",
+  initial: "Initial Template",
+  stamp: "Stamp Template",
+};
+
+const TYPE_ICONS: Record<string, React.ElementType> = {
+  signature: PenLine,
+  initial: Fingerprint,
+  stamp: Stamp,
+};
 
 export default function Signatures() {
-  const { data: signatures, isLoading } = useListSignatures();
-  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const deleteSig = useDeleteSignature();
-  
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const handleDelete = (id: number) => {
-    if (!confirm("Are you sure you want to delete this signature?")) return;
-    
-    deleteSig.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Signature deleted" });
-        queryClient.invalidateQueries({ queryKey: getListSignaturesQueryKey() });
-      }
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  async function loadTemplates() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/me/templates", { credentials: "include" });
+      if (res.ok) setTemplates(await res.json());
+    } catch {}
+    setLoading(false);
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this signature profile?")) return;
+    setDeletingId(id);
+    try {
+      await fetch(`/api/me/templates/${id}`, { method: "DELETE", credentials: "include" });
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+      toast({ title: "Profile deleted" });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const setAsDefault = async (tpl: Template) => {
+    try {
+      const res = await fetch(`/api/me/templates/${tpl.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      if (!res.ok) throw new Error();
+      setTemplates((prev) =>
+        prev.map((t) => (t.templateType === tpl.templateType ? { ...t, isDefault: t.id === tpl.id } : t)),
+      );
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update" });
+    }
+  };
+
+  const handleCreated = (tpl: Template) => {
+    setTemplates((prev) => {
+      const cleared = tpl.isDefault
+        ? prev.map((t) => (t.templateType === tpl.templateType ? { ...t, isDefault: false } : t))
+        : prev;
+      return [...cleared, tpl];
     });
+    setShowAdd(false);
   };
 
   return (
@@ -43,145 +99,285 @@ export default function Signatures() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Signatures</h1>
           <p className="text-muted-foreground mt-1 text-lg">Manage your saved signature profiles.</p>
         </div>
-        <AddSignatureDialog open={showAddDialog} onOpenChange={setShowAddDialog} />
+        <Button className="gap-2 shadow-sm" onClick={() => setShowAdd(true)}>
+          <Plus className="h-4 w-4" /> Add Signature
+        </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="shadow-sm">
-              <CardHeader className="pb-2"><Skeleton className="h-6 w-3/4" /></CardHeader>
-              <CardContent>
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-4 w-1/2 mt-4" />
-              </CardContent>
-              <CardFooter><Skeleton className="h-8 w-20" /></CardFooter>
-            </Card>
-          ))
-        ) : signatures && signatures.length > 0 ? (
-          signatures.map((sig) => (
-            <Card key={sig.id} className="shadow-sm flex flex-col group">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-semibold flex items-center justify-between">
-                  {sig.name}
-                  {sig.type === 'drawn' && <PenTool className="h-4 w-4 text-muted-foreground" />}
-                  {sig.type === 'typed' && <Type className="h-4 w-4 text-muted-foreground" />}
-                  {sig.type === 'uploaded' && <Upload className="h-4 w-4 text-muted-foreground" />}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col items-center justify-center p-6 bg-secondary/20 m-6 rounded-md border border-border/50 relative overflow-hidden h-32">
-                <img 
-                  src={sig.signatureData} 
-                  alt={sig.name} 
-                  className="max-h-full max-w-full object-contain mix-blend-multiply dark:mix-blend-normal dark:invert" 
-                />
-              </CardContent>
-              <CardFooter className="flex justify-between items-center border-t border-border pt-4 text-sm text-muted-foreground">
-                <span>Added {formatDate(sig.createdAt)}</span>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                  onClick={() => handleDelete(sig.id)}
-                  disabled={deleteSig.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </CardFooter>
-            </Card>
-          ))
-        ) : (
-          <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-card border border-dashed border-border rounded-lg">
-            <PenTool className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
-            <h3 className="text-xl font-bold text-foreground">No signatures yet</h3>
-            <p className="text-muted-foreground mt-2 mb-6 max-w-sm">Create a saved signature profile to quickly sign documents without drawing it every time.</p>
-            <Button onClick={() => setShowAddDialog(true)} className="gap-2">
-              <Plus className="h-4 w-4" /> Create First Signature
-            </Button>
-          </div>
-        )}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+        </div>
+      ) : templates.length === 0 ? (
+        <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-card border border-dashed border-border rounded-lg">
+          <PenLine className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
+          <h3 className="text-xl font-bold text-foreground">No signatures yet</h3>
+          <p className="text-muted-foreground mt-2 mb-6 max-w-sm">
+            Create a saved signature profile to quickly sign documents without drawing it every time.
+          </p>
+          <Button onClick={() => setShowAdd(true)} className="gap-2">
+            <Plus className="h-4 w-4" /> Create First Signature
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {templates.map((tpl) => {
+            const Icon = TYPE_ICONS[tpl.templateType] ?? PenLine;
+            return (
+              <Card key={tpl.id} className="shadow-sm flex flex-col group">
+                <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">{TYPE_LABELS[tpl.templateType] ?? tpl.templateType}</span>
+                  </div>
+                  {tpl.isDefault && (
+                    <Badge className="text-[10px] px-1.5 py-0">
+                      <Star className="h-2.5 w-2.5 mr-0.5" /> Default
+                    </Badge>
+                  )}
+                </div>
+                <CardContent className="flex-1 flex items-center justify-center p-4 bg-secondary/20 mx-4 mb-0 rounded-md border border-border/50 h-28">
+                  <img
+                    src={tpl.imageData}
+                    alt={TYPE_LABELS[tpl.templateType]}
+                    className="max-h-full max-w-full object-contain mix-blend-multiply dark:mix-blend-normal dark:invert"
+                  />
+                </CardContent>
+                <CardFooter className="flex justify-between items-center border-t border-border pt-3 mt-3 pb-3 px-4 gap-2">
+                  {!tpl.isDefault && (
+                    <Button variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={() => setAsDefault(tpl)}>
+                      <Star className="h-3 w-3" /> Set Default
+                    </Button>
+                  )}
+                  {tpl.isDefault && <div />}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={deletingId === tpl.id}
+                    onClick={() => handleDelete(tpl.id)}
+                  >
+                    {deletingId === tpl.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <AddProfileDialog open={showAdd} onOpenChange={setShowAdd} onCreated={handleCreated} />
     </div>
   );
 }
 
-function AddSignatureDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [name, setName] = useState("");
-  const [step, setStep] = useState<1 | 2>(1);
+function AddProfileDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreated: (tpl: Template) => void;
+}) {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const createSig = useCreateSignature();
+  const [templateType, setTemplateType] = useState("signature");
+  const [captureTab, setCaptureTab] = useState<"draw" | "upload">("draw");
+  const [uploadImage, setUploadImage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const uploadRef = useRef<HTMLInputElement | null>(null);
+  const padRef = useRef<DrawingPadHandle | null>(null);
 
-  const handleOpenChange = (v: boolean) => {
-    onOpenChange(v);
-    if (!v) {
-      setTimeout(() => {
-        setStep(1);
-        setName("");
-      }, 300);
+  const isStamp = templateType === "stamp";
+
+  const handleClose = () => {
+    onOpenChange(false);
+    setTimeout(() => {
+      setTemplateType("signature");
+      setCaptureTab("draw");
+      setUploadImage(null);
+      padRef.current?.clear();
+    }, 300);
+  };
+
+  const handleTypeChange = (v: string) => {
+    setTemplateType(v);
+    if (v === "stamp") {
+      setCaptureTab("upload");
+      setUploadImage(null);
+      padRef.current?.clear();
     }
   };
 
-  const handleSave = (signatureData: string, type: 'drawn' | 'typed' | 'uploaded') => {
-    createSig.mutate({
-      data: {
-        name: name.trim(),
-        signatureData,
-        type
+  const handleSave = async () => {
+    let imageData = "";
+    if (captureTab === "draw") {
+      if (!padRef.current?.hasContent) {
+        toast({ variant: "destructive", title: "Please draw something first" });
+        return;
       }
-    }, {
-      onSuccess: () => {
-        toast({ title: "Signature profile saved" });
-        handleOpenChange(false);
-        queryClient.invalidateQueries({ queryKey: getListSignaturesQueryKey() });
-      },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to save signature.", variant: "destructive" });
+      imageData = padRef.current.getDataUrl();
+    } else {
+      if (!uploadImage) {
+        toast({ variant: "destructive", title: "Please upload an image first" });
+        return;
       }
-    });
+      imageData = uploadImage;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/me/templates", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateType, imageData, isDefault: false }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      const tpl = (await res.json()) as Template;
+      toast({ title: "Profile saved!" });
+      onCreated(tpl);
+      handleClose();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save profile" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="gap-2 shadow-sm">
-          <Plus className="h-4 w-4" />
-          Add Signature
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[700px]">
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Create Signature Profile</DialogTitle>
+          <DialogTitle>Create Signature Profile</DialogTitle>
         </DialogHeader>
-        
-        <div className="py-4">
-          {step === 1 ? (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="sig-name" className="text-base">Profile Name</Label>
-                <Input 
-                  id="sig-name" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="e.g. Formal Initial, Full Signature" 
-                  className="h-12 text-lg"
-                />
-                <p className="text-sm text-muted-foreground">Give this signature a descriptive name to identify it later.</p>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={() => setStep(2)} disabled={!name.trim()}>Next Step</Button>
-              </div>
+
+        <div className="space-y-4 py-2">
+          {/* Type dropdown — fixed options only */}
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <Select value={templateType} onValueChange={handleTypeChange}>
+              <SelectTrigger>
+                <SelectValue>
+                  <span className="flex items-center gap-2">
+                    {templateType === "signature" && <PenLine className="h-4 w-4" />}
+                    {templateType === "initial" && <Fingerprint className="h-4 w-4" />}
+                    {templateType === "stamp" && <Stamp className="h-4 w-4" />}
+                    {TYPE_LABELS[templateType]}
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="signature">
+                  <span className="flex items-center gap-2"><PenLine className="h-4 w-4" /> Signature Template</span>
+                </SelectItem>
+                <SelectItem value="initial">
+                  <span className="flex items-center gap-2"><Fingerprint className="h-4 w-4" /> Initial Template</span>
+                </SelectItem>
+                <SelectItem value="stamp">
+                  <span className="flex items-center gap-2"><Stamp className="h-4 w-4" /> Stamp Template</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Capture area */}
+          {isStamp ? (
+            <div className="space-y-2">
+              <Label>Upload Stamp Image</Label>
+              {uploadImage ? (
+                <div
+                  className="relative border rounded-lg flex items-center justify-center bg-muted/20"
+                  style={{ height: 160 }}
+                >
+                  <img src={uploadImage} className="max-h-full max-w-full object-contain p-2" alt="Preview" />
+                  <button
+                    className="absolute top-2 right-2 bg-background border rounded-full p-0.5 hover:bg-muted"
+                    onClick={() => setUploadImage(null)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  style={{ height: 160 }}
+                  onClick={() => uploadRef.current?.click()}
+                >
+                  <Upload className="h-7 w-7" />
+                  <span className="text-sm">Click to upload your stamp image</span>
+                  <span className="text-xs">PNG, JPG, BMP, SVG</span>
+                </button>
+              )}
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-medium text-sm text-muted-foreground">Profile: <span className="text-foreground">{name}</span></span>
-                <Button variant="ghost" size="sm" onClick={() => setStep(1)} className="-mr-2 h-8">Change Name</Button>
-              </div>
-              <SignaturePad onSave={handleSave} onCancel={() => handleOpenChange(false)} />
-            </div>
+            <Tabs
+              value={captureTab}
+              onValueChange={(v) => { setCaptureTab(v as "draw" | "upload"); setUploadImage(null); }}
+            >
+              <TabsList className="w-full">
+                <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
+                <TabsTrigger value="upload" className="flex-1">Upload Image</TabsTrigger>
+              </TabsList>
+              <TabsContent value="draw" className="pt-3">
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <DrawingPad ref={padRef} height={155} />
+                </div>
+              </TabsContent>
+              <TabsContent value="upload" className="pt-3">
+                {uploadImage ? (
+                  <div
+                    className="relative border rounded-lg flex items-center justify-center bg-muted/20"
+                    style={{ height: 155 }}
+                  >
+                    <img src={uploadImage} className="max-h-full max-w-full object-contain p-2" alt="Preview" />
+                    <button
+                      className="absolute top-2 right-2 bg-background border rounded-full p-0.5 hover:bg-muted"
+                      onClick={() => setUploadImage(null)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    style={{ height: 155 }}
+                    onClick={() => uploadRef.current?.click()}
+                  >
+                    <Upload className="h-7 w-7" />
+                    <span className="text-sm">Click to upload an image</span>
+                    <span className="text-xs">PNG, JPG, BMP, SVG</span>
+                  </button>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </div>
+
+        <input
+          ref={uploadRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => setUploadImage(ev.target?.result as string);
+            reader.readAsDataURL(file);
+            e.target.value = "";
+          }}
+        />
+
+        <DFooter>
+          <Button variant="outline" onClick={handleClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Save Profile
+          </Button>
+        </DFooter>
       </DialogContent>
     </Dialog>
   );
