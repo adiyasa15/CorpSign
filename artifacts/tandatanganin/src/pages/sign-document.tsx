@@ -6,7 +6,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle2, Loader2, PenLine, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, PenLine, XCircle, Fingerprint, Stamp, Upload, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import SignaturePad from "@/components/signature-pad";
+import DrawingPad, { DrawingPadHandle } from "@/components/signature-pad";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
@@ -90,7 +91,13 @@ export default function SignDocument() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
-  const sigPadRef = useRef<{ getDataUrl: () => string; clear: () => void } | null>(null);
+  const sigPadRef = useRef<DrawingPadHandle | null>(null);
+  const sdUploadRef = useRef<HTMLInputElement | null>(null);
+
+  const [signDialogTab, setSignDialogTab] = useState<"saved" | "draw" | "upload">("draw");
+  const [sdUploadImage, setSdUploadImage] = useState<string | null>(null);
+  const [sdSaveToProfile, setSdSaveToProfile] = useState(true);
+  const [sdSaving, setSdSaving] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -169,10 +176,82 @@ export default function SignDocument() {
     }
   };
 
+  const closeSdDialog = () => {
+    setSignDialogOpen(false);
+    setSdUploadImage(null);
+    setSdSaveToProfile(true);
+    sigPadRef.current?.clear();
+  };
+
   const openFieldDialog = (field: Field) => {
     if (!mySigner || field.signerId !== mySigner.id) return;
+
+    const defaultTpl = templates.find(
+      (t) => t.templateType === field.fieldType && t.isDefault,
+    );
+    if (defaultTpl) {
+      fillField(defaultTpl.imageData);
+      return;
+    }
+
+    const fieldTpls = templates.filter((t) => t.templateType === field.fieldType);
+    setSignDialogTab(fieldTpls.length > 0 ? "saved" : "draw");
+    setSdUploadImage(null);
+    setSdSaveToProfile(true);
     setActiveField(field);
     setSignDialogOpen(true);
+  };
+
+  const applyFromDialog = async () => {
+    if (!activeField) return;
+    let imageData = "";
+
+    if (signDialogTab === "draw") {
+      if (!sigPadRef.current?.hasContent) {
+        toast({ variant: "destructive", title: "Please draw something first" });
+        return;
+      }
+      imageData = sigPadRef.current.getDataUrl();
+    } else if (signDialogTab === "upload") {
+      if (!sdUploadImage) {
+        toast({ variant: "destructive", title: "Please upload an image first" });
+        return;
+      }
+      imageData = sdUploadImage;
+    }
+
+    if (!imageData) return;
+
+    if (sdSaveToProfile) {
+      setSdSaving(true);
+      try {
+        const res = await fetch("/api/me/templates", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            templateType: activeField.fieldType,
+            imageData,
+            isDefault: true,
+          }),
+        });
+        if (res.ok) {
+          const newTpl = (await res.json()) as Template;
+          setTemplates((prev) => {
+            const cleared = prev.map((t) =>
+              t.templateType === activeField.fieldType ? { ...t, isDefault: false } : t,
+            );
+            return [...cleared, newTpl];
+          });
+        }
+      } catch {
+        // save failed — still apply to field
+      } finally {
+        setSdSaving(false);
+      }
+    }
+
+    fillField(imageData);
   };
 
   const fillField = async (imageData: string) => {
@@ -399,56 +478,137 @@ export default function SignDocument() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
+      {/* Hidden file input for sign-dialog upload */}
+      <input
+        ref={sdUploadRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => setSdUploadImage(ev.target?.result as string);
+          reader.readAsDataURL(file);
+          e.target.value = "";
+        }}
+      />
+
+      <Dialog open={signDialogOpen} onOpenChange={(open) => { if (!open) closeSdDialog(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {activeField ? FIELD_LABELS[activeField.fieldType] ?? "Sign" : "Sign"}
+            <DialogTitle className="flex items-center gap-2">
+              {activeField?.fieldType === "signature" && <PenLine className="h-4 w-4" />}
+              {activeField?.fieldType === "initial" && <Fingerprint className="h-4 w-4" />}
+              {activeField?.fieldType === "stamp" && <Stamp className="h-4 w-4" />}
+              {activeField ? `Your ${FIELD_LABELS[activeField.fieldType] ?? "Signature"}` : "Sign"}
             </DialogTitle>
           </DialogHeader>
-          <Tabs defaultValue={templates.filter((t) => t.templateType === activeField?.fieldType).length > 0 ? "saved" : "draw"}>
-            <TabsList className="w-full">
-              <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
-              {templates.filter((t) => t.templateType === activeField?.fieldType).length > 0 && (
-                <TabsTrigger value="saved" className="flex-1">Saved Templates</TabsTrigger>
-              )}
-            </TabsList>
-            <TabsContent value="draw" className="pt-3">
-              <div className="border rounded-lg overflow-hidden">
-                <SignaturePad ref={sigPadRef} height={160} />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">Draw your {activeField?.fieldType ?? "signature"} above</p>
-            </TabsContent>
-            <TabsContent value="saved" className="pt-3">
-              <div className="grid grid-cols-2 gap-3">
-                {templates
-                  .filter((t) => t.templateType === activeField?.fieldType)
-                  .map((tpl) => (
+
+          {(() => {
+            const fieldTpls = templates.filter((t) => t.templateType === activeField?.fieldType);
+            return (
+              <Tabs value={signDialogTab} onValueChange={(v) => setSignDialogTab(v as typeof signDialogTab)}>
+                <TabsList className="w-full">
+                  {fieldTpls.length > 0 && (
+                    <TabsTrigger value="saved" className="flex-1">Saved</TabsTrigger>
+                  )}
+                  <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
+                  <TabsTrigger value="upload" className="flex-1">Upload</TabsTrigger>
+                </TabsList>
+
+                {fieldTpls.length > 0 && (
+                  <TabsContent value="saved" className="pt-3">
+                    <p className="text-xs text-muted-foreground mb-2">Click a saved profile to apply it instantly</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {fieldTpls.map((tpl) => (
+                        <button
+                          key={tpl.id}
+                          disabled={submitting}
+                          className="border rounded-lg p-2 hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+                          onClick={() => fillField(tpl.imageData)}
+                        >
+                          <img src={tpl.imageData} className="w-full h-16 object-contain" />
+                          {tpl.name && <p className="text-xs text-center mt-1 text-muted-foreground">{tpl.name}</p>}
+                          {tpl.isDefault && <Badge className="text-[10px] mx-auto block w-fit mt-1">Default</Badge>}
+                        </button>
+                      ))}
+                    </div>
+                  </TabsContent>
+                )}
+
+                <TabsContent value="draw" className="pt-3 space-y-3">
+                  {fieldTpls.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      You don't have a saved {activeField?.fieldType ?? "signature"} yet. Draw one below.
+                    </p>
+                  )}
+                  <div className="border rounded-lg overflow-hidden">
+                    <DrawingPad ref={sigPadRef} height={160} />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={sdSaveToProfile}
+                      onChange={(e) => setSdSaveToProfile(e.target.checked)}
+                    />
+                    Save as my {activeField?.fieldType ?? "signature"} profile (auto-apply next time)
+                  </label>
+                </TabsContent>
+
+                <TabsContent value="upload" className="pt-3 space-y-3">
+                  {fieldTpls.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      You don't have a saved {activeField?.fieldType ?? "signature"} yet. Upload an image below.
+                    </p>
+                  )}
+                  {sdUploadImage ? (
+                    <div className="relative border rounded-lg p-3 flex items-center justify-center bg-muted/20" style={{ height: 160 }}>
+                      <img src={sdUploadImage} className="max-h-full max-w-full object-contain" alt="Uploaded" />
+                      <button
+                        className="absolute top-2 right-2 bg-background border rounded-full p-0.5 hover:bg-muted"
+                        onClick={() => setSdUploadImage(null)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      key={tpl.id}
-                      className="border rounded-lg p-2 hover:border-primary hover:bg-primary/5 transition-colors"
-                      onClick={() => fillField(tpl.imageData)}
+                      className="w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                      style={{ height: 160 }}
+                      onClick={() => sdUploadRef.current?.click()}
                     >
-                      <img src={tpl.imageData} className="w-full h-16 object-contain" />
-                      {tpl.name && <p className="text-xs text-center mt-1 text-muted-foreground">{tpl.name}</p>}
-                      {tpl.isDefault && <Badge className="text-[10px] mx-auto block w-fit mt-1">Default</Badge>}
+                      <Upload className="h-7 w-7" />
+                      <span className="text-sm">Click to upload an image</span>
+                      <span className="text-xs">PNG, JPG, or SVG</span>
                     </button>
-                  ))}
-              </div>
-            </TabsContent>
-          </Tabs>
+                  )}
+                  <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={sdSaveToProfile}
+                      onChange={(e) => setSdSaveToProfile(e.target.checked)}
+                    />
+                    Save as my {activeField?.fieldType ?? "signature"} profile (auto-apply next time)
+                  </label>
+                </TabsContent>
+              </Tabs>
+            );
+          })()}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSignDialogOpen(false)}>Cancel</Button>
-            <Button
-              disabled={submitting}
-              onClick={() => {
-                const data = sigPadRef.current?.getDataUrl();
-                if (data) fillField(data);
-              }}
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Apply
-            </Button>
+            <Button variant="outline" onClick={closeSdDialog}>Cancel</Button>
+            {signDialogTab !== "saved" && (
+              <Button
+                disabled={submitting || sdSaving}
+                onClick={applyFromDialog}
+              >
+                {(submitting || sdSaving) && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Apply
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

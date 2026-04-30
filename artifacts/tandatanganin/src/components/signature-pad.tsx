@@ -202,6 +202,7 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
 
 export interface DrawingPadHandle {
   getDataUrl: () => string;
+  hasContent: boolean;
   clear: () => void;
 }
 
@@ -216,6 +217,7 @@ const DrawingPad = forwardRef<DrawingPadHandle, DrawingPadProps>(function Drawin
 
   useImperativeHandle(ref, () => ({
     getDataUrl: () => canvasRef.current?.toDataURL("image/png") ?? "",
+    hasContent,
     clear: () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -223,7 +225,7 @@ const DrawingPad = forwardRef<DrawingPadHandle, DrawingPadProps>(function Drawin
       if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
       setHasContent(false);
     },
-  }));
+  }), [hasContent]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

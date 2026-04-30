@@ -6,12 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, Trash2, Star, PenLine, Fingerprint, Stamp, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Star, PenLine, Fingerprint, Stamp, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SignaturePad from "@/components/signature-pad";
+import DrawingPad, { DrawingPadHandle } from "@/components/signature-pad";
 
 interface Template {
   id: number;
@@ -44,10 +45,13 @@ export default function SignatureSettings() {
   const [addType, setAddType] = useState<string>("signature");
   const [addName, setAddName] = useState("");
   const [addDefault, setAddDefault] = useState(false);
+  const [addTab, setAddTab] = useState<"draw" | "upload">("draw");
+  const [addUploadImage, setAddUploadImage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const sigPadRef = useRef<{ getDataUrl: () => string; clear: () => void } | null>(null);
+  const sigPadRef = useRef<DrawingPadHandle | null>(null);
+  const addUploadRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -65,14 +69,26 @@ export default function SignatureSettings() {
     setAddType(type);
     setAddName("");
     setAddDefault(false);
+    setAddTab("draw");
+    setAddUploadImage(null);
     setAddOpen(true);
+    setTimeout(() => sigPadRef.current?.clear(), 50);
   };
 
   const saveTemplate = async () => {
-    const imageData = sigPadRef.current?.getDataUrl();
-    if (!imageData) {
-      toast({ variant: "destructive", title: "Please draw your signature first" });
-      return;
+    let imageData = "";
+    if (addTab === "draw") {
+      if (!sigPadRef.current?.hasContent) {
+        toast({ variant: "destructive", title: "Please draw something first" });
+        return;
+      }
+      imageData = sigPadRef.current.getDataUrl();
+    } else {
+      if (!addUploadImage) {
+        toast({ variant: "destructive", title: "Please upload an image first" });
+        return;
+      }
+      imageData = addUploadImage;
     }
     setSaving(true);
     try {
@@ -210,23 +226,92 @@ export default function SignatureSettings() {
         })}
       </Tabs>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* Hidden file input for upload */}
+      <input
+        ref={addUploadRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => setAddUploadImage(ev.target?.result as string);
+          reader.readAsDataURL(file);
+          e.target.value = "";
+        }}
+      />
+
+      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) { setAddUploadImage(null); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add {TYPE_LABELS[addType]} Template</DialogTitle>
+            <DialogTitle>Create Profile</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Type dropdown */}
             <div className="space-y-2">
-              <Label>Name (optional)</Label>
+              <Label>Type</Label>
+              <Select value={addType} onValueChange={setAddType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="signature">
+                    <span className="flex items-center gap-2"><PenLine className="h-4 w-4" /> Signature</span>
+                  </SelectItem>
+                  <SelectItem value="initial">
+                    <span className="flex items-center gap-2"><Fingerprint className="h-4 w-4" /> Initial</span>
+                  </SelectItem>
+                  <SelectItem value="stamp">
+                    <span className="flex items-center gap-2"><Stamp className="h-4 w-4" /> Stamp</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Name */}
+            <div className="space-y-2">
+              <Label>Name <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
               <Input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder={`My ${TYPE_LABELS[addType]}`} />
             </div>
-            <div className="space-y-2">
-              <Label>Draw your {TYPE_LABELS[addType].toLowerCase()}</Label>
-              <div className="border rounded-lg overflow-hidden bg-white">
-                <SignaturePad ref={sigPadRef} height={160} />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+
+            {/* Draw / Upload tabs */}
+            <Tabs value={addTab} onValueChange={(v) => { setAddTab(v as "draw" | "upload"); setAddUploadImage(null); }}>
+              <TabsList className="w-full">
+                <TabsTrigger value="draw" className="flex-1">Draw</TabsTrigger>
+                <TabsTrigger value="upload" className="flex-1">Upload Image</TabsTrigger>
+              </TabsList>
+              <TabsContent value="draw" className="pt-3">
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <DrawingPad ref={sigPadRef} height={150} />
+                </div>
+              </TabsContent>
+              <TabsContent value="upload" className="pt-3">
+                {addUploadImage ? (
+                  <div className="relative border rounded-lg flex items-center justify-center bg-muted/20" style={{ height: 150 }}>
+                    <img src={addUploadImage} className="max-h-full max-w-full object-contain p-2" alt="Preview" />
+                    <button
+                      className="absolute top-2 right-2 bg-background border rounded-full p-0.5 hover:bg-muted"
+                      onClick={() => setAddUploadImage(null)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    style={{ height: 150 }}
+                    onClick={() => addUploadRef.current?.click()}
+                  >
+                    <Upload className="h-6 w-6" />
+                    <span className="text-sm">Click to upload</span>
+                    <span className="text-xs">PNG, JPG, or SVG</span>
+                  </button>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input type="checkbox" checked={addDefault} onChange={(e) => setAddDefault(e.target.checked)} className="rounded" />
               Set as default {TYPE_LABELS[addType].toLowerCase()}
             </label>
@@ -235,7 +320,7 @@ export default function SignatureSettings() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
             <Button onClick={saveTemplate} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Template
+              Save Profile
             </Button>
           </DialogFooter>
         </DialogContent>
