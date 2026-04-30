@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Tandatanganin — Digital Signature"
+version = "1.0.0"
+id = "artifacts/tandatanganin"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19600
+
+[services.development]
+run = "pnpm --filter @workspace/tandatanganin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tandatanganin", "run", "build" ]
+publicDir = "artifacts/tandatanganin/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19600"
+BASE_PATH = "/"

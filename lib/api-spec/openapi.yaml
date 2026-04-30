@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Tandatanganin Digital Signature API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: documents
+    description: Document management
+  - name: signatures
+    description: Signature management
+  - name: dashboard
+    description: Dashboard summary
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,208 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List all documents
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, signed, rejected, all]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: createDocument
+      tags: [documents]
+      summary: Upload a new document for signing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentBody"
+      responses:
+        "201":
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /documents/{id}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get a document by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateDocument
+      tags: [documents]
+      summary: Update document status or metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentBody"
+      responses:
+        "200":
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Delete a document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /documents/{id}/sign:
+    post:
+      operationId: signDocument
+      tags: [documents]
+      summary: Apply a signature to a document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignDocumentBody"
+      responses:
+        "200":
+          description: Document signed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /signatures:
+    get:
+      operationId: listSignatures
+      tags: [signatures]
+      summary: List saved signature profiles
+      responses:
+        "200":
+          description: List of signature profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Signature"
+    post:
+      operationId: createSignature
+      tags: [signatures]
+      summary: Save a new signature profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSignatureBody"
+      responses:
+        "201":
+          description: Signature saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Signature"
+
+  /signatures/{id}:
+    delete:
+      operationId: deleteSignature
+      tags: [signatures]
+      summary: Delete a saved signature
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent document activity
+      responses:
+        "200":
+          description: Recent activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +241,174 @@ components:
       required:
         - status
 
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        status:
+          type: string
+          enum: [pending, signed, rejected]
+        signerName:
+          type: string
+        signerEmail:
+          type: string
+        signedAt:
+          type: string
+          nullable: true
+        signatureData:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - title
+        - fileName
+        - fileSize
+        - status
+        - signerName
+        - signerEmail
+        - createdAt
+        - updatedAt
+
+    CreateDocumentBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        signerName:
+          type: string
+        signerEmail:
+          type: string
+      required:
+        - title
+        - fileName
+        - fileSize
+        - signerName
+        - signerEmail
+
+    UpdateDocumentBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, signed, rejected]
+        signerName:
+          type: string
+        signerEmail:
+          type: string
+
+    SignDocumentBody:
+      type: object
+      properties:
+        signatureData:
+          type: string
+        signatureId:
+          type: integer
+          nullable: true
+      required:
+        - signatureData
+
+    Signature:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        signatureData:
+          type: string
+        type:
+          type: string
+          enum: [drawn, typed, uploaded]
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - signatureData
+        - type
+        - createdAt
+
+    CreateSignatureBody:
+      type: object
+      properties:
+        name:
+          type: string
+        signatureData:
+          type: string
+        type:
+          type: string
+          enum: [drawn, typed, uploaded]
+      required:
+        - name
+        - signatureData
+        - type
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalDocuments:
+          type: integer
+        pendingDocuments:
+          type: integer
+        signedDocuments:
+          type: integer
+        rejectedDocuments:
+          type: integer
+        signaturesThisMonth:
+          type: integer
+        totalSignatures:
+          type: integer
+      required:
+        - totalDocuments
+        - pendingDocuments
+        - signedDocuments
+        - rejectedDocuments
+        - signaturesThisMonth
+        - totalSignatures
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        documentTitle:
+          type: string
+        action:
+          type: string
+          enum: [uploaded, signed, rejected, viewed]
+        signerName:
+          type: string
+        timestamp:
+          type: string
+      required:
+        - id
+        - documentId
+        - documentTitle
+        - action
+        - signerName
+        - timestamp
