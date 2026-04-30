@@ -137,9 +137,15 @@ router.get("/documents", requireAuth, async (req, res) => {
       }
       conditions.push(inArray(documentsTable.id, allIds));
     } else if (!canSeeAllDocs(user.role)) {
-      // Regular users: own docs + CC'd docs
-      if (ccDocIds.length > 0) {
-        conditions.push(or(eq(documentsTable.uploadedById, user.id), inArray(documentsTable.id, ccDocIds))!);
+      // Regular users: own docs + docs where they are a signer + CC'd docs
+      const mySignerDocs = await db
+        .select({ documentId: documentSignersTable.documentId })
+        .from(documentSignersTable)
+        .where(eq(documentSignersTable.email, user.email));
+      const signerDocIds = mySignerDocs.map((r) => r.documentId);
+      const involvedIds = [...new Set([...signerDocIds, ...ccDocIds])];
+      if (involvedIds.length > 0) {
+        conditions.push(or(eq(documentsTable.uploadedById, user.id), inArray(documentsTable.id, involvedIds))!);
       } else {
         conditions.push(eq(documentsTable.uploadedById, user.id));
       }
