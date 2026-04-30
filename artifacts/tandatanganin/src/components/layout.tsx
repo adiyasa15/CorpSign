@@ -5,7 +5,7 @@ import {
   PenLine, Upload, ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +23,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
       onSuccess: () => {
-        queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
         queryClient.clear();
-        setLocation("/login");
+        window.location.assign("/login");
       },
     });
   };
