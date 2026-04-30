@@ -29,15 +29,14 @@ export default function Dashboard() {
           icon={FileText}
           isLoading={isLoadingSummary}
         />
-        {isAdminOrAbove && (
-          <StatCard
-            title="Pending Signatures"
-            value={summary?.pendingDocuments}
-            icon={Clock}
-            isLoading={isLoadingSummary}
-            alert={summary?.pendingDocuments ? summary.pendingDocuments > 0 : false}
-          />
-        )}
+        <StatCard
+          title="Awaiting My Signature"
+          value={summary?.pendingDocuments}
+          icon={Clock}
+          isLoading={isLoadingSummary}
+          alert={summary?.pendingDocuments ? summary.pendingDocuments > 0 : false}
+          onClick={summary?.pendingDocuments ? () => setLocation("/documents?status=in_progress") : undefined}
+        />
         <StatCard
           title="Signed Documents"
           value={summary?.signedDocuments}
@@ -50,14 +49,16 @@ export default function Dashboard() {
           icon={XCircle}
           isLoading={isLoadingSummary}
         />
-        <StatCard
-          title="Pending Approvals"
-          value={(summary as any)?.pendingApprovals}
-          icon={UserCheck}
-          isLoading={isLoadingSummary}
-          alert={!!(summary as any)?.pendingApprovals && (summary as any).pendingApprovals > 0}
-          onClick={isAdminOrAbove ? () => setLocation("/users?tab=pending") : undefined}
-        />
+        {isAdminOrAbove && (
+          <StatCard
+            title="Pending Approvals"
+            value={(summary as any)?.pendingApprovals}
+            icon={UserCheck}
+            isLoading={isLoadingSummary}
+            alert={!!(summary as any)?.pendingApprovals && (summary as any).pendingApprovals > 0}
+            onClick={() => setLocation("/users?tab=pending")}
+          />
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
