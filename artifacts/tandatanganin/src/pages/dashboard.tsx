@@ -29,13 +29,15 @@ export default function Dashboard() {
           icon={FileText}
           isLoading={isLoadingSummary}
         />
-        <StatCard
-          title="Pending Signatures"
-          value={summary?.pendingDocuments}
-          icon={Clock}
-          isLoading={isLoadingSummary}
-          alert={summary?.pendingDocuments ? summary.pendingDocuments > 0 : false}
-        />
+        {isAdminOrAbove && (
+          <StatCard
+            title="Pending Signatures"
+            value={summary?.pendingDocuments}
+            icon={Clock}
+            isLoading={isLoadingSummary}
+            alert={summary?.pendingDocuments ? summary.pendingDocuments > 0 : false}
+          />
+        )}
         <StatCard
           title="Signed Documents"
           value={summary?.signedDocuments}
