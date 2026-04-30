@@ -6,7 +6,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle2, Loader2, PenLine } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, PenLine, XCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import SignaturePad from "@/components/signature-pad";
@@ -74,6 +86,10 @@ export default function SignDocument() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+
   const sigPadRef = useRef<{ getDataUrl: () => string; clear: () => void } | null>(null);
 
   useEffect(() => {
@@ -133,6 +149,25 @@ export default function SignDocument() {
     }
     setPages(rendered);
   }
+
+  const handleReject = async () => {
+    setRejecting(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/reject`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: rejectReason || undefined }),
+      });
+      if (!res.ok) throw new Error("Failed to reject document");
+      toast({ title: "Document rejected", description: "The uploader and all parties have been notified." });
+      setRejectDialogOpen(false);
+      setLocation("/documents");
+    } catch {
+      toast({ variant: "destructive", title: "Failed to reject document" });
+    } finally {
+      setRejecting(false);
+    }
+  };
 
   const openFieldDialog = (field: Field) => {
     if (!mySigner || field.signerId !== mySigner.id) return;
@@ -258,6 +293,19 @@ export default function SignDocument() {
           </div>
         </div>
 
+        {/* Reject button — visible to signer before they complete */}
+        {mySigner && !done && doc?.status === "in_progress" && (
+          <div className="p-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive gap-2"
+              onClick={() => setRejectDialogOpen(true)}
+            >
+              <XCircle className="h-4 w-4" /> Reject Document
+            </Button>
+          </div>
+        )}
         {done && (
           <div className="p-4 border-t">
             <Button variant="outline" className="w-full" size="sm" onClick={() => setLocation(`/documents/${docId}`)}>
@@ -310,6 +358,40 @@ export default function SignDocument() {
           ))}
         </div>
       </ScrollArea>
+
+      {/* Reject Dialog */}
+      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-destructive" /> Reject this document?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Rejecting will stop the signing process for all parties. The document uploader and all signers/observers will be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <Label className="text-sm font-medium">Reason (optional)</Label>
+            <Textarea
+              className="mt-1.5"
+              placeholder="Explain why you are rejecting this document..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rejecting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={rejecting}
+              onClick={handleReject}
+            >
+              {rejecting ? "Rejecting..." : "Reject Document"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
         <DialogContent className="max-w-lg">

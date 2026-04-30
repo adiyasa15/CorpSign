@@ -12,6 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Dialog,
   DialogContent,
@@ -37,7 +48,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { formatDate, formatBytes } from "@/lib/format";
-import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical, Download } from "lucide-react";
+import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical, Download, Ban } from "lucide-react";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +62,12 @@ export default function Documents() {
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "signed" | "rejected">("all");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [voidTarget, setVoidTarget] = useState<{ id: number; title: string } | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   const { data: documents, isLoading } = useListDocuments({ 
     search: search || undefined, 
@@ -58,6 +75,31 @@ export default function Documents() {
   });
 
   const isApprover = user?.role === "approver";
+
+  const handleVoid = async () => {
+    if (!voidTarget) return;
+    setVoiding(true);
+    try {
+      const res = await fetch(`/api/documents/${voidTarget.id}/void`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: voidReason || undefined }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to void document");
+      }
+      toast({ title: "Document voided", description: "All parties have been notified." });
+      queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
+      setVoidTarget(null);
+      setVoidReason("");
+    } catch (e: unknown) {
+      toast({ variant: "destructive", title: (e as Error).message });
+    } finally {
+      setVoiding(false);
+    }
+  };
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -164,6 +206,17 @@ export default function Documents() {
                               Download
                             </DropdownMenuItem>
                           )}
+                          {/* Void — only uploader on active docs */}
+                          {(["draft", "in_progress"] as string[]).includes(doc.status) && (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); setVoidTarget({ id: doc.id, title: doc.title }); setVoidReason(""); }}
+                              data-testid={`void-doc-${doc.id}`}
+                            >
+                              <Ban className="mr-2 h-4 w-4" />
+                              Void Document
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -184,6 +237,40 @@ export default function Documents() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Void Document Dialog */}
+      <AlertDialog open={!!voidTarget} onOpenChange={(open) => { if (!open) setVoidTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-destructive" /> Void Document?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently void <strong>{voidTarget?.title}</strong>. All signers and observers will be notified. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <Label className="text-sm font-medium">Reason (optional)</Label>
+            <Textarea
+              className="mt-1.5"
+              placeholder="Explain why this document is being voided..."
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={voiding}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={voiding}
+              onClick={handleVoid}
+            >
+              {voiding ? "Voiding..." : "Void Document"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -197,8 +284,9 @@ function StatusBadge({ status }: { status: string }) {
     case "in_progress":
       return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900/50 gap-1"><Clock className="h-3 w-3" /> In Progress</Badge>;
     case "signed":
-    case "completed":
       return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> Signed</Badge>;
+    case "completed":
+      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900/50 gap-1"><CheckCircle className="h-3 w-3" /> Completed</Badge>;
     case "rejected":
       return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900/50 gap-1"><XCircle className="h-3 w-3" /> Rejected</Badge>;
     default:

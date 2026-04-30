@@ -1,11 +1,27 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { documentsTable, documentSignersTable, documentFieldsTable, documentAuditTable } from "@workspace/db";
+import { documentsTable, documentSignersTable, documentFieldsTable, documentAuditTable, documentCcTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { generateSignedPDF, UPLOADS_DIR } from "./documents";
+import { notifySignerCompleted, notifyDocumentCompleted } from "../lib/mailer";
 import fs from "fs";
 import path from "path";
+
+async function getCcEmails(docId: number): Promise<string[]> {
+  const rows = await db
+    .select({ email: usersTable.email })
+    .from(documentCcTable)
+    .innerJoin(usersTable, eq(documentCcTable.userId, usersTable.id))
+    .where(eq(documentCcTable.documentId, docId));
+  return rows.map((r) => r.email);
+}
+
+async function getUploaderEmail(uploadedById: number | null): Promise<string | null> {
+  if (!uploadedById) return null;
+  const [u] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, uploadedById));
+  return u?.email ?? null;
+}
 
 const router = Router();
 
@@ -266,6 +282,32 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
         documentId: docId, actorId: user.id, actorName: user.name,
         actorEmail: user.email, actorIp: req.ip, eventType: "document_completed",
       });
+
+      // Notify: document completed
+      const [completedDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+      const ccEmails = await getCcEmails(docId);
+      const uploaderEmail = await getUploaderEmail(completedDoc?.uploadedById ?? null);
+      notifyDocumentCompleted({
+        docId,
+        docTitle: completedDoc?.title ?? "",
+        uploaderEmail: uploaderEmail ?? "",
+        allSignerEmails: signers.map((s) => s.email),
+        ccEmails,
+      }).catch(() => {});
+    } else if (allSignerFieldsFilled) {
+      // Notify: this signer completed, nudge next pending signer
+      const [incompleteDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+      const ccEmails = await getCcEmails(docId);
+      const uploaderEmail = await getUploaderEmail(incompleteDoc?.uploadedById ?? null);
+      const nextSigner = signers.find((s) => s.status !== "completed" && s.id !== signer.id);
+      notifySignerCompleted({
+        docId,
+        docTitle: incompleteDoc?.title ?? "",
+        signerName: signer.name,
+        uploaderEmail: uploaderEmail ?? "",
+        nextSigner: nextSigner ? { name: nextSigner.name, email: nextSigner.email } : undefined,
+        ccEmails,
+      }).catch(() => {});
     }
 
     res.json({ ok: true, signerCompleted: allSignerFieldsFilled, documentCompleted: allSignersComplete });

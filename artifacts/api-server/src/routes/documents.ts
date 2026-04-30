@@ -22,8 +22,29 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import {
+  notifyDocumentSent,
+  notifyDocumentCompleted,
+  notifyDocumentRejected,
+  notifyDocumentVoided,
+} from "../lib/mailer";
 
 const router = Router();
+
+async function getCcEmails(docId: number): Promise<string[]> {
+  const rows = await db
+    .select({ email: usersTable.email })
+    .from(documentCcTable)
+    .innerJoin(usersTable, eq(documentCcTable.userId, usersTable.id))
+    .where(eq(documentCcTable.documentId, docId));
+  return rows.map((r) => r.email);
+}
+
+async function getUploaderEmail(uploadedById: number | null): Promise<string | null> {
+  if (!uploadedById) return null;
+  const [u] = await db.select({ email: usersTable.email, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, uploadedById));
+  return u?.email ?? null;
+}
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -484,6 +505,17 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
       signerName: signers.map((s) => s.name).join(", "),
     });
 
+    // Notify all parties (fire-and-forget)
+    const ccEmails = await getCcEmails(docId);
+    notifyDocumentSent({
+      docId,
+      docTitle: doc.title,
+      uploaderName: user.name,
+      uploaderEmail: user.email,
+      signers: signers.map((s) => ({ name: s.name, email: s.email })),
+      ccEmails,
+    }).catch(() => {});
+
     res.json({ ok: true });
   } catch (err) {
     req.log.error(err);
@@ -585,6 +617,94 @@ async function generateCOC(doc: typeof documentsTable.$inferSelect, docId: numbe
 
   return pdfDoc.save();
 }
+
+router.post("/documents/:id/void", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const user = req.user!;
+    const { reason } = req.body as { reason?: string };
+
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+
+    // Only uploader (or admin/superadmin) can void
+    if (doc.uploadedById !== user.id && user.role !== "admin" && user.role !== "superadmin") {
+      res.status(403).json({ error: "Only the document uploader can void this document" }); return;
+    }
+
+    // Can void if in_progress or draft
+    if (!["draft", "in_progress"].includes(doc.status)) {
+      res.status(400).json({ error: "Only draft or in-progress documents can be voided" }); return;
+    }
+
+    await db.update(documentsTable).set({ status: "rejected", updatedAt: new Date() }).where(eq(documentsTable.id, docId));
+    await logAudit(docId, user.id, user.name, user.email, req.ip, "voided", { reason });
+
+    // Notify
+    const signers = await db.select().from(documentSignersTable).where(eq(documentSignersTable.documentId, docId));
+    const ccEmails = await getCcEmails(docId);
+    const uploaderEmail = await getUploaderEmail(doc.uploadedById);
+
+    notifyDocumentVoided({
+      docId,
+      docTitle: doc.title,
+      voidedByName: user.name,
+      reason,
+      uploaderEmail: uploaderEmail ?? user.email,
+      allSignerEmails: signers.map((s) => s.email),
+      ccEmails,
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/documents/:id/reject", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const user = req.user!;
+    const { reason } = req.body as { reason?: string };
+
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+
+    // Signers can reject; admins/superadmin too
+    const signer = (await db.select().from(documentSignersTable).where(
+      and(eq(documentSignersTable.documentId, docId), eq(documentSignersTable.email, user.email))
+    ))[0];
+    const isAdmin = user.role === "admin" || user.role === "superadmin";
+    if (!signer && !isAdmin) {
+      res.status(403).json({ error: "Only assigned signers or admins can reject" }); return;
+    }
+
+    await db.update(documentsTable).set({ status: "rejected", updatedAt: new Date() }).where(eq(documentsTable.id, docId));
+    await logAudit(docId, user.id, user.name, user.email, req.ip, "rejected", { reason });
+
+    // Notify
+    const signers = await db.select().from(documentSignersTable).where(eq(documentSignersTable.documentId, docId));
+    const ccEmails = await getCcEmails(docId);
+    const uploaderEmail = await getUploaderEmail(doc.uploadedById);
+
+    notifyDocumentRejected({
+      docId,
+      docTitle: doc.title,
+      rejectedByName: user.name,
+      rejectedByEmail: user.email,
+      reason,
+      uploaderEmail: uploaderEmail ?? "",
+      otherSignerEmails: signers.filter((s) => s.email !== user.email).map((s) => s.email),
+      ccEmails,
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.post("/documents/:id/sign", requireAuth, async (req, res) => {
   try {
