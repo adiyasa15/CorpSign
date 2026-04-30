@@ -2,6 +2,7 @@ import { pgTable, serial, integer, text, timestamp, pgEnum } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { documentsTable } from "./documents";
+import { usersTable } from "./users";
 
 export const activityActionEnum = pgEnum("activity_action", ["uploaded", "signed", "rejected", "viewed"]);
 
@@ -12,6 +13,7 @@ export const activityTable = pgTable("activity", {
   action: activityActionEnum("action").notNull(),
   signerName: text("signer_name").notNull(),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "set null" }),
 });
 
 export const insertActivitySchema = createInsertSchema(activityTable).omit({ id: true });

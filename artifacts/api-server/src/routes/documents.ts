@@ -244,6 +244,7 @@ router.post("/documents/upload", requireAuth, upload.single("file"), async (req,
       documentTitle: doc.title,
       action: "uploaded",
       signerName: user.name,
+      userId: user.id,
     });
 
     res.status(201).json(formatDocument(doc));
@@ -538,6 +539,7 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
       documentTitle: doc.title,
       action: "uploaded",
       signerName: signers.map((s) => s.name).join(", "),
+      userId: user.id,
     });
 
     // Notify all parties (fire-and-forget)
@@ -861,6 +863,7 @@ router.post("/documents/:id/sign", requireAuth, async (req, res) => {
       documentTitle: existing.title,
       action: "signed",
       signerName: user.name,
+      userId: user.id,
     });
 
     await logAudit(docId, user.id, user.name, user.email, req.ip, "signed");

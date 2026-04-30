@@ -107,10 +107,15 @@ router.get("/dashboard/summary", async (req, res) => {
 });
 
 router.get("/dashboard/recent", async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   try {
     const activity = await db
       .select()
       .from(activityTable)
+      .where(eq(activityTable.userId, req.user.id))
       .orderBy(sql`${activityTable.timestamp} desc`)
       .limit(20);
 
