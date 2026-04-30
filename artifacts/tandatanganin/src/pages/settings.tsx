@@ -3,16 +3,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { User, Bell, Shield, Globe } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/language-context";
+import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const { toast } = useToast();
   const { t, language, setLanguage } = useLanguage();
+  const { user, isLoading } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+
+  useEffect(() => {
+    if (user?.name) {
+      const parts = user.name.trim().split(/\s+/);
+      setFirstName(parts[0] ?? "");
+      setLastName(parts.slice(1).join(" "));
+    }
+  }, [user?.name]);
 
   const handleSave = () => {
     setIsSaving(true);
@@ -38,21 +52,41 @@ export default function Settings() {
             <CardDescription>{t("settings_profile_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">{t("settings_first_name")}</Label>
-                <Input id="firstName" defaultValue="User" />
+            {isLoading ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+                <Skeleton className="h-9 w-full" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">{t("settings_last_name")}</Label>
-                <Input id="lastName" defaultValue="Name" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">{t("settings_email")}</Label>
-              <Input id="email" type="email" defaultValue="user@example.com" disabled />
-              <p className="text-xs text-muted-foreground">{t("settings_email_hint")}</p>
-            </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">{t("settings_first_name")}</Label>
+                    <Input
+                      id="firstName"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName">{t("settings_last_name")}</Label>
+                    <Input
+                      id="lastName"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">{t("settings_email")}</Label>
+                  <Input id="email" type="email" value={user?.email ?? ""} disabled />
+                  <p className="text-xs text-muted-foreground">{t("settings_email_hint")}</p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
