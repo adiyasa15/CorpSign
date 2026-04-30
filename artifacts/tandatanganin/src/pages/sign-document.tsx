@@ -216,7 +216,8 @@ export default function SignDocument() {
       (t) => t.templateType === field.fieldType && t.isDefault,
     );
     if (defaultTpl) {
-      fillField(defaultTpl.imageData);
+      setActiveField(field);
+      fillField(defaultTpl.imageData, field);
       return;
     }
 
@@ -247,7 +248,7 @@ export default function SignDocument() {
       imageData = sdUploadImage;
     }
 
-    if (!imageData) return;
+    if (!imageData || !activeField) return;
 
     if (sdSaveToProfile) {
       setSdSaving(true);
@@ -278,14 +279,15 @@ export default function SignDocument() {
       }
     }
 
-    fillField(imageData);
+    fillField(imageData, activeField);
   };
 
-  const fillField = async (imageData: string) => {
-    if (!activeField) return;
+  const fillField = async (imageData: string, fieldToFill?: Field) => {
+    const field = fieldToFill ?? activeField;
+    if (!field) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/documents/${docId}/fields/${activeField.id}/fill`, {
+      const res = await fetch(`/api/documents/${docId}/fields/${field.id}/fill`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData }),
@@ -293,7 +295,7 @@ export default function SignDocument() {
       if (!res.ok) throw new Error("Failed to fill field");
       const result = await res.json() as { documentCompleted: boolean };
 
-      const updatedFields = fields.map((f) => f.id === activeField.id ? { ...f, filledImage: imageData } : f);
+      const updatedFields = fields.map((f) => f.id === field.id ? { ...f, filledImage: imageData } : f);
       setFields(updatedFields);
       setSignDialogOpen(false);
       setActiveField(null);
