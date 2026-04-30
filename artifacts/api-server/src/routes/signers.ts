@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { generateSignedPDF, UPLOADS_DIR } from "./documents";
 import { notifySignerCompleted, notifyDocumentCompleted } from "../lib/mailer";
+import { telegramSignerCompleted, telegramDocumentCompleted } from "../lib/telegram";
 import fs from "fs";
 import path from "path";
 
@@ -287,27 +288,31 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       const [completedDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       const ccEmails = await getCcEmails(docId);
       const uploaderEmail = await getUploaderEmail(completedDoc?.uploadedById ?? null);
-      notifyDocumentCompleted({
+      const completedOpts = {
         docId,
         docTitle: completedDoc?.title ?? "",
         uploaderEmail: uploaderEmail ?? "",
         allSignerEmails: signers.map((s) => s.email),
         ccEmails,
-      }).catch(() => {});
+      };
+      notifyDocumentCompleted(completedOpts).catch(() => {});
+      telegramDocumentCompleted(completedOpts).catch(() => {});
     } else if (allSignerFieldsFilled) {
       // Notify: this signer completed, nudge next pending signer
       const [incompleteDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       const ccEmails = await getCcEmails(docId);
       const uploaderEmail = await getUploaderEmail(incompleteDoc?.uploadedById ?? null);
       const nextSigner = signers.find((s) => s.status !== "completed" && s.id !== signer.id);
-      notifySignerCompleted({
+      const signerOpts = {
         docId,
         docTitle: incompleteDoc?.title ?? "",
         signerName: signer.name,
         uploaderEmail: uploaderEmail ?? "",
         nextSigner: nextSigner ? { name: nextSigner.name, email: nextSigner.email } : undefined,
         ccEmails,
-      }).catch(() => {});
+      };
+      notifySignerCompleted(signerOpts).catch(() => {});
+      telegramSignerCompleted(signerOpts).catch(() => {});
     }
 
     res.json({ ok: true, signerCompleted: allSignerFieldsFilled, documentCompleted: allSignersComplete });

@@ -29,6 +29,12 @@ import {
   notifyDocumentRejected,
   notifyDocumentVoided,
 } from "../lib/mailer";
+import {
+  telegramDocumentSent,
+  telegramDocumentCompleted,
+  telegramDocumentRejected,
+  telegramDocumentVoided,
+} from "../lib/telegram";
 
 const router = Router();
 
@@ -568,14 +574,16 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
 
     // Notify all parties (fire-and-forget)
     const ccEmails = await getCcEmails(docId);
-    notifyDocumentSent({
+    const sentOpts = {
       docId,
       docTitle: doc.title,
       uploaderName: user.name,
       uploaderEmail: user.email,
       signers: signers.map((s) => ({ name: s.name, email: s.email })),
       ccEmails,
-    }).catch(() => {});
+    };
+    notifyDocumentSent(sentOpts).catch(() => {});
+    telegramDocumentSent(sentOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {
@@ -805,7 +813,7 @@ router.post("/documents/:id/void", requireAuth, async (req, res) => {
     const ccEmails = await getCcEmails(docId);
     const uploaderEmail = await getUploaderEmail(doc.uploadedById);
 
-    notifyDocumentVoided({
+    const voidedOpts = {
       docId,
       docTitle: doc.title,
       voidedByName: user.name,
@@ -813,7 +821,9 @@ router.post("/documents/:id/void", requireAuth, async (req, res) => {
       uploaderEmail: uploaderEmail ?? user.email,
       allSignerEmails: signers.map((s) => s.email),
       ccEmails,
-    }).catch(() => {});
+    };
+    notifyDocumentVoided(voidedOpts).catch(() => {});
+    telegramDocumentVoided(voidedOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {
@@ -854,7 +864,7 @@ router.post("/documents/:id/reject", requireAuth, async (req, res) => {
     const ccEmails = await getCcEmails(docId);
     const uploaderEmail = await getUploaderEmail(doc.uploadedById);
 
-    notifyDocumentRejected({
+    const rejectedOpts = {
       docId,
       docTitle: doc.title,
       rejectedByName: user.name,
@@ -863,7 +873,9 @@ router.post("/documents/:id/reject", requireAuth, async (req, res) => {
       uploaderEmail: uploaderEmail ?? "",
       otherSignerEmails: signers.filter((s) => s.email !== user.email).map((s) => s.email),
       ccEmails,
-    }).catch(() => {});
+    };
+    notifyDocumentRejected(rejectedOpts).catch(() => {});
+    telegramDocumentRejected(rejectedOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {

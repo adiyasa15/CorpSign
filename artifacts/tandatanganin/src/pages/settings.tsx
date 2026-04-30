@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { User, Bell, Shield, Globe } from "lucide-react";
+import { User, Bell, Shield, Globe, Send } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -69,6 +70,7 @@ export default function Settings() {
   const [lastName, setLastName] = useState("");
   const [phoneCode, setPhoneCode] = useState("+62");
   const [phoneLocal, setPhoneLocal] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
 
   useEffect(() => {
     if (user?.name) {
@@ -81,7 +83,10 @@ export default function Settings() {
       setPhoneCode(code);
       setPhoneLocal(local);
     }
-  }, [user?.name, user?.phone]);
+    if (user?.telegramChatId !== undefined) {
+      setTelegramChatId(user.telegramChatId ?? "");
+    }
+  }, [user?.name, user?.phone, user?.telegramChatId]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -92,7 +97,11 @@ export default function Settings() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone }),
+        body: JSON.stringify({
+          name,
+          phone,
+          telegramChatId: telegramChatId.trim() || null,
+        }),
       });
       if (!res.ok) throw new Error("failed");
       refetch();
@@ -239,6 +248,58 @@ export default function Settings() {
                 <p className="text-sm text-muted-foreground">{t("settings_notif_marketing_desc")}</p>
               </div>
               <Switch />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Telegram Notifications */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" /> {t("settings_telegram_title")}
+            </CardTitle>
+            <CardDescription>{t("settings_telegram_desc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="telegramChatId">{t("settings_telegram_chat_id")}</Label>
+                {user?.telegramChatId ? (
+                  <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-600">
+                    ✓ {t("settings_telegram_connected")}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    {t("settings_telegram_not_connected")}
+                  </Badge>
+                )}
+              </div>
+              <Input
+                id="telegramChatId"
+                type="text"
+                inputMode="numeric"
+                placeholder={t("settings_telegram_chat_id_placeholder") as string}
+                value={telegramChatId}
+                onChange={(e) => setTelegramChatId(e.target.value.replace(/[^\d-]/g, ""))}
+              />
+            </div>
+            <div className="rounded-lg bg-muted/50 border border-border p-4 space-y-2 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">{t("settings_telegram_how_to")}</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  {t("settings_telegram_step1")}{" "}
+                  <a
+                    href="https://t.me/userinfobot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 font-medium"
+                  >
+                    {t("settings_telegram_bot_name")}
+                  </a>
+                </li>
+                <li>{t("settings_telegram_step2")}</li>
+                <li>{t("settings_telegram_step3")}</li>
+              </ol>
             </div>
           </CardContent>
         </Card>

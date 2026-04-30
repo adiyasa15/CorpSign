@@ -15,6 +15,7 @@ declare global {
       name: string;
       role: string;
       phone: string;
+      telegramChatId: string | null;
     }
   }
 }
@@ -30,7 +31,7 @@ passport.deserializeUser(async (id: number, done) => {
       done(null, false);
       return;
     }
-    done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "" });
+    done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "", telegramChatId: user.telegramChatId ?? null });
   } catch (err) {
     done(err);
   }
@@ -57,7 +58,7 @@ passport.use(
         done(null, false, { message: "Invalid credentials" });
         return;
       }
-      done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "" });
+      done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "", telegramChatId: user.telegramChatId ?? null });
     } catch (err) {
       done(err);
     }
@@ -125,7 +126,7 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
             return;
           }
 
-          done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "" });
+          done(null, { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone ?? "", telegramChatId: user.telegramChatId ?? null });
         } catch (err) {
           done(err as Error);
         }

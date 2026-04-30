@@ -248,6 +248,17 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   settings_enable_2fa: "Aktifkan 2FA",
   settings_save_all: "Simpan Semua Perubahan",
   settings_saved: "Pengaturan berhasil disimpan",
+  settings_telegram_title: "Notifikasi Telegram",
+  settings_telegram_desc: "Hubungkan akun Telegram Anda untuk menerima notifikasi langsung di Telegram.",
+  settings_telegram_chat_id: "ID Chat Telegram",
+  settings_telegram_chat_id_placeholder: "mis. 123456789",
+  settings_telegram_how_to: "Cara mendapatkan ID Chat Anda:",
+  settings_telegram_step1: "Buka Telegram dan cari bot Anda atau kirim pesan ke",
+  settings_telegram_step2: "Kirim pesan apa saja ke bot tersebut (mis. /start)",
+  settings_telegram_step3: "ID Chat Anda akan muncul — tempelkan di sini",
+  settings_telegram_bot_name: "@userinfobot",
+  settings_telegram_connected: "Telegram terhubung",
+  settings_telegram_not_connected: "Belum terhubung",
 
   // ── Users / admin ────────────────────────────────────
   users_title: "Manajemen Pengguna",

@@ -14,6 +14,7 @@ export const usersTable = pgTable("users", {
   role: userRoleEnum("role").notNull().default("user"),
   googleId: text("google_id").unique(),
   passwordHash: text("password_hash"),
+  telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").notNull().default(true),
   pendingApproval: boolean("pending_approval").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),

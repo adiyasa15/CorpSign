@@ -246,6 +246,17 @@ export const en = {
   settings_enable_2fa: "Enable 2FA",
   settings_save_all: "Save All Changes",
   settings_saved: "Settings saved successfully",
+  settings_telegram_title: "Telegram Notifications",
+  settings_telegram_desc: "Connect your Telegram account to receive notifications directly in Telegram.",
+  settings_telegram_chat_id: "Telegram Chat ID",
+  settings_telegram_chat_id_placeholder: "e.g. 123456789",
+  settings_telegram_how_to: "How to get your Chat ID:",
+  settings_telegram_step1: "Open Telegram and search for your bot or message",
+  settings_telegram_step2: "Send any message to the bot (e.g. /start)",
+  settings_telegram_step3: "Your Chat ID will appear — paste it here",
+  settings_telegram_bot_name: "@userinfobot",
+  settings_telegram_connected: "Telegram connected",
+  settings_telegram_not_connected: "Not connected",
 
   // ── Users / admin ────────────────────────────────────
   users_title: "User Management",

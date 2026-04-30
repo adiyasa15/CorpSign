@@ -185,6 +185,7 @@ router.post("/users", requireAdminOrSuperAdmin, async (req, res) => {
 const UpdateProfileBody = z.object({
   name: z.string().min(1).max(200),
   phone: z.string().min(1).max(30),
+  telegramChatId: z.string().max(50).nullable().optional(),
 });
 
 router.patch("/users/profile", requireAuth, async (req, res) => {
@@ -194,14 +195,23 @@ router.patch("/users/profile", requireAuth, async (req, res) => {
       res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
       return;
     }
+    const setData: Record<string, unknown> = {
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      updatedAt: new Date(),
+    };
+    if (parsed.data.telegramChatId !== undefined) {
+      setData.telegramChatId = parsed.data.telegramChatId ?? null;
+    }
     const [updated] = await db
       .update(usersTable)
-      .set({ name: parsed.data.name, phone: parsed.data.phone, updatedAt: new Date() })
+      .set(setData)
       .where(eq(usersTable.id, req.user!.id))
       .returning();
     req.user!.name = updated.name;
     req.user!.phone = updated.phone;
-    res.json({ name: updated.name, phone: updated.phone });
+    req.user!.telegramChatId = updated.telegramChatId ?? null;
+    res.json({ name: updated.name, phone: updated.phone, telegramChatId: updated.telegramChatId ?? null });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

@@ -7,6 +7,7 @@ export interface AuthUser {
   name: string;
   role: "superadmin" | "admin" | "user" | "approver";
   phone: string;
+  telegramChatId: string | null;
 }
 
 interface AuthContextType {
