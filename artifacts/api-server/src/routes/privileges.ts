@@ -12,12 +12,17 @@ async function getOrCreatePrivileges() {
   if (rows.length > 0) return rows[0];
   const inserted = await db
     .insert(privilegesTable)
-    .values({ maxUsersPerAdmin: 50, maxUploadSizeMb: 10, roleCapabilities: defaultCapabilities })
+    .values({
+      maxAdminAccounts: 10,
+      maxUsersPerAdmin: 50,
+      maxUploadSizeMb: 10,
+      roleCapabilities: defaultCapabilities,
+    })
     .returning();
   return inserted[0];
 }
 
-// Public limits endpoint (any authenticated user) — only returns upload size
+// Public limits endpoint (any authenticated user)
 router.get("/privileges/limits", async (req, res) => {
   if (!req.isAuthenticated()) {
     res.status(401).json({ error: "Not authenticated" });
@@ -26,8 +31,9 @@ router.get("/privileges/limits", async (req, res) => {
   try {
     const priv = await getOrCreatePrivileges();
     res.json({
-      maxUploadSizeMb: priv.maxUploadSizeMb,
+      maxAdminAccounts: priv.maxAdminAccounts,
       maxUsersPerAdmin: priv.maxUsersPerAdmin,
+      maxUploadSizeMb: priv.maxUploadSizeMb,
     });
   } catch (err) {
     req.log.error(err);
@@ -54,6 +60,7 @@ const RoleCapabilitiesSchema = z.object({
 });
 
 const UpdatePrivilegesBody = z.object({
+  maxAdminAccounts: z.number().int().min(1).max(9999),
   maxUsersPerAdmin: z.number().int().min(1).max(9999),
   maxUploadSizeMb: z.number().int().refine((v) => [10, 20, 30, 40, 50].includes(v), {
     message: "Must be one of 10, 20, 30, 40, 50",
@@ -76,6 +83,7 @@ router.put("/privileges", requireSuperAdmin, async (req, res) => {
     const updated = await db
       .update(privilegesTable)
       .set({
+        maxAdminAccounts: parsed.data.maxAdminAccounts,
         maxUsersPerAdmin: parsed.data.maxUsersPerAdmin,
         maxUploadSizeMb: parsed.data.maxUploadSizeMb,
         roleCapabilities: parsed.data.roleCapabilities,

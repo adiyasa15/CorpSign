@@ -114,9 +114,26 @@ router.post("/users", requireAdminOrSuperAdmin, async (req, res) => {
       return;
     }
 
+    const priv = await getPrivileges();
+
+    // Enforce max admin accounts limit when creating an admin-role user (all callers)
+    if (body.data.role === "admin") {
+      const [{ adminTotal }] = await db
+        .select({ adminTotal: count() })
+        .from(usersTable)
+        .where(and(eq(usersTable.role, "admin"), eq(usersTable.pendingApproval, false)));
+      if (Number(adminTotal) >= priv.maxAdminAccounts) {
+        res.status(429).json({
+          error: "admin_limit_reached",
+          limit: priv.maxAdminAccounts,
+          current: Number(adminTotal),
+        });
+        return;
+      }
+    }
+
     // Enforce max-users-per-admin limit for admin callers (superadmin is exempt)
     if (req.user!.role === "admin") {
-      const priv = await getPrivileges();
       const [{ total }] = await db
         .select({ total: count() })
         .from(usersTable)

@@ -52,6 +52,7 @@ export default function Privileges() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [maxAdmins, setMaxAdmins] = useState(10);
   const [maxUsers, setMaxUsers] = useState(50);
   const [maxUploadMb, setMaxUploadMb] = useState<number>(10);
   const [caps, setCaps] = useState<AllRoleCapabilities>(DEFAULT_CAPS);
@@ -66,6 +67,7 @@ export default function Privileges() {
     fetch("/api/privileges", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
+        setMaxAdmins(data.maxAdminAccounts ?? 10);
         setMaxUsers(data.maxUsersPerAdmin ?? 50);
         setMaxUploadMb(data.maxUploadSizeMb ?? 10);
         setCaps(data.roleCapabilities ?? DEFAULT_CAPS);
@@ -89,6 +91,7 @@ export default function Privileges() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          maxAdminAccounts: maxAdmins,
           maxUsersPerAdmin: maxUsers,
           maxUploadSizeMb: maxUploadMb,
           roleCapabilities: caps,
@@ -131,17 +134,31 @@ export default function Privileges() {
             <CardDescription>{t("priv_admin_limits_desc")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="max-w-xs space-y-2">
-              <Label htmlFor="maxUsers">{t("priv_max_users_label")}</Label>
-              <Input
-                id="maxUsers"
-                type="number"
-                min={1}
-                max={9999}
-                value={maxUsers}
-                onChange={(e) => setMaxUsers(Math.max(1, parseInt(e.target.value) || 1))}
-              />
-              <p className="text-xs text-muted-foreground">{t("priv_max_users_hint")}</p>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="maxAdmins">{t("priv_max_admins_label")}</Label>
+                <Input
+                  id="maxAdmins"
+                  type="number"
+                  min={1}
+                  max={9999}
+                  value={maxAdmins}
+                  onChange={(e) => setMaxAdmins(Math.max(1, parseInt(e.target.value) || 1))}
+                />
+                <p className="text-xs text-muted-foreground">{t("priv_max_admins_hint")}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxUsers">{t("priv_max_users_label")}</Label>
+                <Input
+                  id="maxUsers"
+                  type="number"
+                  min={1}
+                  max={9999}
+                  value={maxUsers}
+                  onChange={(e) => setMaxUsers(Math.max(1, parseInt(e.target.value) || 1))}
+                />
+                <p className="text-xs text-muted-foreground">{t("priv_max_users_hint")}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
