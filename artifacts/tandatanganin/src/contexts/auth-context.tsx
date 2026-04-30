@@ -1,7 +1,12 @@
 import { createContext, useContext, ReactNode } from "react";
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { AuthUser } from "@workspace/api-client-react/src/generated/api.schemas";
-import { useQueryClient } from "@tanstack/react-query";
+import { useGetMe } from "@workspace/api-client-react";
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: "superadmin" | "admin" | "user" | "approver";
+}
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -12,15 +17,18 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data: user, isLoading, refetch } = useGetMe({
+  const { data, isLoading, refetch } = useGetMe({
     query: {
       retry: false,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
+      staleTime: 30_000,
     }
   });
 
+  const user = data as AuthUser | undefined;
+
   return (
-    <AuthContext.Provider value={{ user: user || null, isLoading, refetch }}>
+    <AuthContext.Provider value={{ user: user ?? null, isLoading, refetch }}>
       {children}
     </AuthContext.Provider>
   );

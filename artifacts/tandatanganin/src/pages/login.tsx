@@ -1,15 +1,25 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Redirect } from "wouter";
 import { useLoginLocal, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { PenTool, Loader2 } from "lucide-react";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PenTool, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { Redirect } from "wouter";
+
+function getErrorMessage(errorCode: string | null): string | null {
+  if (!errorCode) return null;
+  const messages: Record<string, string> = {
+    google_failed: "Google sign-in failed. Make sure your Google account is allowed to access this app. If the app is in testing mode, ask your administrator to add your email as a test user.",
+    session_error: "A session error occurred. Please try again.",
+    access_denied: "Access was denied. Please try again or use your email/password instead.",
+  };
+  return messages[errorCode] ?? "Sign-in failed. Please try again.";
+}
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -19,6 +29,10 @@ export default function Login() {
   const queryClient = useQueryClient();
   const loginMutation = useLoginLocal();
   const { user, refetch } = useAuth();
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const errorCode = searchParams.get("error");
+  const errorMessage = getErrorMessage(errorCode);
 
   if (user) {
     return <Redirect to="/" />;
@@ -38,7 +52,7 @@ export default function Login() {
           toast({
             variant: "destructive",
             title: "Login Failed",
-            description: "Invalid credentials. Please try again.",
+            description: "Invalid email or password. Please try again.",
           });
         },
       }
@@ -61,6 +75,13 @@ export default function Login() {
             <CardTitle className="text-xl text-center">Sign In</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {errorMessage && (
+              <Alert variant="destructive" data-testid="login-error-alert">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            )}
+
             <Button
               variant="outline"
               className="w-full h-12 text-base font-medium relative"
@@ -102,9 +123,7 @@ export default function Login() {
                 />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                </div>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"

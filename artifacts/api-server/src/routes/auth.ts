@@ -18,7 +18,13 @@ router.post("/auth/login", (req, res, next) => {
         next(loginErr);
         return;
       }
-      res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          next(saveErr);
+          return;
+        }
+        res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      });
     });
   })(req, res, next);
 });
@@ -27,9 +33,15 @@ router.get("/auth/google", passport.authenticate("google", { scope: ["profile", 
 
 router.get(
   "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: "/?auth=failed" }),
+  passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
   (req, res) => {
-    res.redirect("/");
+    req.session.save((err) => {
+      if (err) {
+        res.redirect("/login?error=session_error");
+        return;
+      }
+      res.redirect("/");
+    });
   },
 );
 
@@ -39,7 +51,9 @@ router.post("/auth/logout", (req, res, next) => {
       next(err);
       return;
     }
-    res.json({ ok: true });
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
   });
 });
 
