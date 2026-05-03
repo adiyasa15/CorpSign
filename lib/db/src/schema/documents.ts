@@ -17,6 +17,7 @@ export const documentsTable = pgTable("documents", {
   uploadedById: integer("uploaded_by_id"),
   signedAt: timestamp("signed_at"),
   signatureData: text("signature_data"),
+  ownerReminderSentAt: timestamp("owner_reminder_sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

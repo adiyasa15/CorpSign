@@ -2,8 +2,8 @@ import { db } from "@workspace/db";
 import { documentSignersTable, documentsTable, privilegesTable, usersTable } from "@workspace/db";
 import { eq, isNull, and, lte, inArray } from "drizzle-orm";
 import { logger } from "./logger";
-import { sendReminderEmail } from "./mailer";
-import { telegramReminderNotification } from "./telegram";
+import { sendReminderEmail, sendOwnerPendingReminderEmail } from "./mailer";
+import { telegramReminderNotification, telegramOwnerPendingReminder } from "./telegram";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 
@@ -28,7 +28,7 @@ async function runReminderCheck(): Promise<void> {
 
     const cutoff = new Date(Date.now() - delayMs);
 
-    // Find pending signers whose document was created before the cutoff and no reminder sent yet
+    // ── 1. Notify pending signers ────────────────────────────────────────────
     const pendingSigners = await db
       .select({
         signerId: documentSignersTable.id,
@@ -36,7 +36,6 @@ async function runReminderCheck(): Promise<void> {
         signerEmail: documentSignersTable.email,
         documentId: documentSignersTable.documentId,
         docTitle: documentsTable.title,
-        docCreatedAt: documentsTable.createdAt,
         uploaderEmail: usersTable.email,
         uploaderName: usersTable.name,
       })
@@ -52,39 +51,111 @@ async function runReminderCheck(): Promise<void> {
         ),
       );
 
-    if (pendingSigners.length === 0) return;
+    if (pendingSigners.length > 0) {
+      logger.info({ count: pendingSigners.length }, "Sending pending-action reminders to signers");
 
-    logger.info({ count: pendingSigners.length }, "Sending pending-action reminders");
+      for (const signer of pendingSigners) {
+        try {
+          await sendReminderEmail({
+            signerName: signer.signerName,
+            signerEmail: signer.signerEmail,
+            docId: signer.documentId,
+            docTitle: signer.docTitle,
+            uploaderName: signer.uploaderName ?? "the document owner",
+          });
 
-    for (const signer of pendingSigners) {
-      try {
-        // Send email reminder
-        await sendReminderEmail({
-          signerName: signer.signerName,
-          signerEmail: signer.signerEmail,
-          docId: signer.documentId,
-          docTitle: signer.docTitle,
-          uploaderName: signer.uploaderName ?? "the document owner",
-        });
+          await telegramReminderNotification({
+            signerEmail: signer.signerEmail,
+            signerName: signer.signerName,
+            docId: signer.documentId,
+            docTitle: signer.docTitle,
+            uploaderName: signer.uploaderName ?? "the document owner",
+          });
 
-        // Send Telegram reminder
-        await telegramReminderNotification({
-          signerEmail: signer.signerEmail,
-          signerName: signer.signerName,
-          docId: signer.documentId,
-          docTitle: signer.docTitle,
-          uploaderName: signer.uploaderName ?? "the document owner",
-        });
+          await db
+            .update(documentSignersTable)
+            .set({ reminderSentAt: new Date() })
+            .where(eq(documentSignersTable.id, signer.signerId));
 
-        // Mark reminder as sent
-        await db
-          .update(documentSignersTable)
-          .set({ reminderSentAt: new Date() })
-          .where(eq(documentSignersTable.id, signer.signerId));
+          logger.info({ signerId: signer.signerId, email: signer.signerEmail }, "Signer reminder sent");
+        } catch (err) {
+          logger.error({ err, signerId: signer.signerId }, "Failed to send signer reminder");
+        }
+      }
+    }
 
-        logger.info({ signerId: signer.signerId, email: signer.signerEmail }, "Reminder sent");
-      } catch (err) {
-        logger.error({ err, signerId: signer.signerId }, "Failed to send reminder");
+    // ── 2. Notify document owners whose docs are still pending ───────────────
+    const pendingDocs = await db
+      .select({
+        docId: documentsTable.id,
+        docTitle: documentsTable.title,
+        ownerEmail: usersTable.email,
+        ownerName: usersTable.name,
+      })
+      .from(documentsTable)
+      .innerJoin(usersTable, eq(documentsTable.uploadedById, usersTable.id))
+      .where(
+        and(
+          inArray(documentsTable.status, ["pending", "in_progress"]),
+          isNull(documentsTable.ownerReminderSentAt),
+          lte(documentsTable.createdAt, cutoff),
+        ),
+      );
+
+    if (pendingDocs.length > 0) {
+      logger.info({ count: pendingDocs.length }, "Sending pending-document reminders to owners");
+
+      for (const doc of pendingDocs) {
+        if (!doc.ownerEmail) continue;
+        try {
+          // Get the list of still-pending signers for this document
+          const stillPending = await db
+            .select({
+              name: documentSignersTable.name,
+              email: documentSignersTable.email,
+            })
+            .from(documentSignersTable)
+            .where(
+              and(
+                eq(documentSignersTable.documentId, doc.docId),
+                eq(documentSignersTable.status, "pending"),
+              ),
+            );
+
+          if (stillPending.length === 0) {
+            // No pending signers left — mark without sending
+            await db
+              .update(documentsTable)
+              .set({ ownerReminderSentAt: new Date() })
+              .where(eq(documentsTable.id, doc.docId));
+            continue;
+          }
+
+          await sendOwnerPendingReminderEmail({
+            ownerEmail: doc.ownerEmail,
+            ownerName: doc.ownerName ?? "Document Owner",
+            docId: doc.docId,
+            docTitle: doc.docTitle,
+            pendingSigners: stillPending,
+          });
+
+          await telegramOwnerPendingReminder({
+            ownerEmail: doc.ownerEmail,
+            ownerName: doc.ownerName ?? "Document Owner",
+            docId: doc.docId,
+            docTitle: doc.docTitle,
+            pendingSigners: stillPending,
+          });
+
+          await db
+            .update(documentsTable)
+            .set({ ownerReminderSentAt: new Date() })
+            .where(eq(documentsTable.id, doc.docId));
+
+          logger.info({ docId: doc.docId, ownerEmail: doc.ownerEmail }, "Owner reminder sent");
+        } catch (err) {
+          logger.error({ err, docId: doc.docId }, "Failed to send owner reminder");
+        }
       }
     }
   } catch (err) {
@@ -94,7 +165,6 @@ async function runReminderCheck(): Promise<void> {
 
 export function startReminderScheduler(): void {
   logger.info("Reminder scheduler started");
-  // Run once after 1 minute on startup, then every CHECK_INTERVAL_MS
   setTimeout(() => {
     void runReminderCheck();
     setInterval(() => { void runReminderCheck(); }, CHECK_INTERVAL_MS);

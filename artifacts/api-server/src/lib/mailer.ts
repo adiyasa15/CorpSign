@@ -271,6 +271,32 @@ export async function notifyDocumentRejected(opts: {
   }
 }
 
+export async function sendOwnerPendingReminderEmail(opts: {
+  ownerEmail: string;
+  ownerName: string;
+  docId: number;
+  docTitle: string;
+  pendingSigners: { name: string; email: string }[];
+}) {
+  const { ownerEmail, ownerName, docId, docTitle, pendingSigners } = opts;
+  const link = docLink(docId);
+  const signerRows = pendingSigners
+    .map((s) => `<tr><td style="font-size:13px;color:#374151;padding:4px 0">• ${s.name} &lt;${s.email}&gt;</td></tr>`)
+    .join("");
+  const html = baseLayout("Info", `
+    <h2 style="margin:0 0 8px;font-size:20px;color:#111">Reminder: Document Awaiting Signatures</h2>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px">Hi ${ownerName}, your document is still waiting for the following signer${pendingSigners.length > 1 ? "s" : ""} to complete their signature.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:8px">
+      <tr><td style="font-size:13px;color:#374151;padding-bottom:8px"><strong>Document:</strong> ${docTitle}</td></tr>
+      <tr><td style="font-size:13px;color:#374151;padding-bottom:4px"><strong>Pending signers:</strong></td></tr>
+      ${signerRows}
+    </table>
+    <p style="font-size:13px;color:#6b7280">You may want to follow up with them directly.</p>
+    ${btn("View Document", link, "#2563eb")}
+  `);
+  await send(ownerEmail, subjectLine("Info", `Reminder — ${docTitle}`), html);
+}
+
 export async function sendReminderEmail(opts: {
   signerName: string;
   signerEmail: string;
