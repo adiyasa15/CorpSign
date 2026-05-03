@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { documentSignersTable, documentsTable, privilegesTable, usersTable } from "@workspace/db";
-import { eq, isNull, and, lte, inArray } from "drizzle-orm";
+import { eq, isNull, isNotNull, and, or, lte, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { sendReminderEmail, sendOwnerPendingReminderEmail } from "./mailer";
 import { telegramReminderNotification, telegramOwnerPendingReminder } from "./telegram";
@@ -24,11 +24,18 @@ async function getDelayMs(): Promise<number> {
 async function runReminderCheck(): Promise<void> {
   try {
     const delayMs = await getDelayMs();
-    if (delayMs <= 0) return;
+    if (delayMs <= 0) {
+      logger.info("Reminders disabled (delay = 0), skipping check");
+      return;
+    }
 
     const cutoff = new Date(Date.now() - delayMs);
+    logger.info({ delayMs, cutoff }, "Running reminder check");
 
     // ── 1. Notify pending signers ────────────────────────────────────────────
+    // Send if:
+    //   a) Never reminded yet AND document was created before cutoff, OR
+    //   b) Already reminded but last reminder was before cutoff (repeat reminder)
     const pendingSigners = await db
       .select({
         signerId: documentSignersTable.id,
@@ -45,9 +52,19 @@ async function runReminderCheck(): Promise<void> {
       .where(
         and(
           eq(documentSignersTable.status, "pending"),
-          isNull(documentSignersTable.reminderSentAt),
-          lte(documentsTable.createdAt, cutoff),
           inArray(documentsTable.status, ["pending", "in_progress"]),
+          or(
+            // First reminder: never sent, document old enough
+            and(
+              isNull(documentSignersTable.reminderSentAt),
+              lte(documentsTable.createdAt, cutoff),
+            ),
+            // Repeat reminder: last reminder was sent before cutoff
+            and(
+              isNotNull(documentSignersTable.reminderSentAt),
+              lte(documentSignersTable.reminderSentAt, cutoff),
+            ),
+          ),
         ),
       );
 
@@ -82,23 +99,39 @@ async function runReminderCheck(): Promise<void> {
           logger.error({ err, signerId: signer.signerId }, "Failed to send signer reminder");
         }
       }
+    } else {
+      logger.info("No signers due for a reminder");
     }
 
     // ── 2. Notify document owners whose docs are still pending ───────────────
+    // Send if:
+    //   a) Never reminded yet AND document was created before cutoff, OR
+    //   b) Already reminded but last reminder was before cutoff (repeat reminder)
     const pendingDocs = await db
       .select({
         docId: documentsTable.id,
         docTitle: documentsTable.title,
         ownerEmail: usersTable.email,
         ownerName: usersTable.name,
+        ownerReminderSentAt: documentsTable.ownerReminderSentAt,
       })
       .from(documentsTable)
       .innerJoin(usersTable, eq(documentsTable.uploadedById, usersTable.id))
       .where(
         and(
           inArray(documentsTable.status, ["pending", "in_progress"]),
-          isNull(documentsTable.ownerReminderSentAt),
-          lte(documentsTable.createdAt, cutoff),
+          or(
+            // First reminder: never sent, document old enough
+            and(
+              isNull(documentsTable.ownerReminderSentAt),
+              lte(documentsTable.createdAt, cutoff),
+            ),
+            // Repeat reminder: last reminder was sent before cutoff
+            and(
+              isNotNull(documentsTable.ownerReminderSentAt),
+              lte(documentsTable.ownerReminderSentAt, cutoff),
+            ),
+          ),
         ),
       );
 
@@ -108,7 +141,6 @@ async function runReminderCheck(): Promise<void> {
       for (const doc of pendingDocs) {
         if (!doc.ownerEmail) continue;
         try {
-          // Get the list of still-pending signers for this document
           const stillPending = await db
             .select({
               name: documentSignersTable.name,
@@ -157,6 +189,8 @@ async function runReminderCheck(): Promise<void> {
           logger.error({ err, docId: doc.docId }, "Failed to send owner reminder");
         }
       }
+    } else {
+      logger.info("No document owners due for a reminder");
     }
   } catch (err) {
     logger.error({ err }, "Reminder check failed");
@@ -164,7 +198,8 @@ async function runReminderCheck(): Promise<void> {
 }
 
 export function startReminderScheduler(): void {
-  logger.info("Reminder scheduler started");
+  logger.info({ checkIntervalMs: CHECK_INTERVAL_MS }, "Reminder scheduler started");
+  // Run once after a short delay, then repeat on every CHECK_INTERVAL_MS
   setTimeout(() => {
     void runReminderCheck();
     setInterval(() => { void runReminderCheck(); }, CHECK_INTERVAL_MS);
