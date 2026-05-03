@@ -129,6 +129,10 @@ export const en = {
   doc_void_reason_placeholder: "Explain why you are voiding this document…",
   doc_void_btn: "Void Document",
   doc_voiding: "Voiding…",
+  doc_remind: "Send Reminder",
+  doc_reminding: "Sending…",
+  doc_remind_sent: "Reminder sent to pending signers",
+  doc_remind_error: "Failed to send reminder",
 
   // ── Document editor ──────────────────────────────────
   editor_title: "Document Editor",

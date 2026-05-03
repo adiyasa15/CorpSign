@@ -28,12 +28,14 @@ import {
   notifyDocumentCompleted,
   notifyDocumentRejected,
   notifyDocumentVoided,
+  sendReminderEmail,
 } from "../lib/mailer";
 import {
   telegramDocumentSent,
   telegramDocumentCompleted,
   telegramDocumentRejected,
   telegramDocumentVoided,
+  telegramReminderNotification,
 } from "../lib/telegram";
 
 const router = Router();
@@ -826,6 +828,72 @@ router.post("/documents/:id/void", requireAuth, async (req, res) => {
     telegramDocumentVoided(voidedOpts).catch(() => {});
 
     res.json({ ok: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/documents/:id/remind", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const user = req.user!;
+
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+
+    const isOwner = doc.uploadedById === user.id;
+    const isAdmin = user.role === "admin" || user.role === "superadmin";
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: "Only the document owner or an admin can send reminders" }); return;
+    }
+    if (!["pending", "in_progress"].includes(doc.status)) {
+      res.status(400).json({ error: "Document is not pending any signatures" }); return;
+    }
+
+    const pendingSigners = await db
+      .select()
+      .from(documentSignersTable)
+      .where(and(eq(documentSignersTable.documentId, docId), eq(documentSignersTable.status, "pending")));
+
+    if (pendingSigners.length === 0) {
+      res.status(400).json({ error: "No pending signers found" }); return;
+    }
+
+    const uploaderInfo = doc.uploadedById
+      ? (await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, doc.uploadedById)))[0]
+      : null;
+    const uploaderName = uploaderInfo?.name ?? user.name;
+
+    // Fire notifications to each pending signer (non-blocking)
+    for (const signer of pendingSigners) {
+      sendReminderEmail({
+        signerName: signer.name,
+        signerEmail: signer.email,
+        docId,
+        docTitle: doc.title,
+        uploaderName,
+      }).catch(() => {});
+      telegramReminderNotification({
+        signerEmail: signer.email,
+        signerName: signer.name,
+        docId,
+        docTitle: doc.title,
+        uploaderName,
+      }).catch(() => {});
+      // Reset per-signer reminderSentAt so scheduler can re-trigger later
+      await db.update(documentSignersTable)
+        .set({ reminderSentAt: null })
+        .where(eq(documentSignersTable.id, signer.id));
+    }
+
+    // Reset document-level ownerReminderSentAt so scheduler can re-trigger later
+    await db.update(documentsTable)
+      .set({ ownerReminderSentAt: null })
+      .where(eq(documentsTable.id, docId));
+
+    req.log.info({ docId, pendingCount: pendingSigners.length }, "Manual reminder sent by owner");
+    res.json({ ok: true, reminded: pendingSigners.length });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

@@ -131,6 +131,10 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   doc_void_reason_placeholder: "Jelaskan alasan Anda membatalkan dokumen ini…",
   doc_void_btn: "Batalkan Dokumen",
   doc_voiding: "Membatalkan…",
+  doc_remind: "Kirim Pengingat",
+  doc_reminding: "Mengirim…",
+  doc_remind_sent: "Pengingat terkirim ke penandatangan yang tertunda",
+  doc_remind_error: "Gagal mengirim pengingat",
 
   // ── Document editor ──────────────────────────────────
   editor_title: "Editor Dokumen",

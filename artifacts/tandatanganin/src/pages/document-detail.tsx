@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
-  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail, Ban,
+  Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail, Ban, BellRing,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -133,6 +133,7 @@ export default function DocumentDetail() {
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
+  const [reminding, setReminding] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -212,6 +213,29 @@ export default function DocumentDetail() {
     }
   }
 
+  async function handleRemind() {
+    setReminding(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/remind`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error ?? "Failed");
+      }
+      const data = await res.json();
+      toast({
+        title: t("doc_remind_sent"),
+        description: `${data.reminded} signer${data.reminded !== 1 ? "s" : ""} notified`,
+      });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: t("doc_remind_error"), description: e.message });
+    } finally {
+      setReminding(false);
+    }
+  }
+
   async function handleVoid() {
     setVoiding(true);
     try {
@@ -268,6 +292,9 @@ export default function DocumentDetail() {
   const isInvolved = isOwner || isAdmin || !!mySigner || isCC;
   const canEdit = (isOwner || isAdmin) && doc.status === "draft";
   const canVoid = (isOwner || isAdmin) && ["draft", "pending", "in_progress"].includes(doc.status);
+  const canRemind = (isOwner || isAdmin)
+    && ["pending", "in_progress"].includes(doc.status)
+    && doc.signers.some((s) => s.status === "pending");
   const canSign = !!mySigner && mySigner.status !== "completed" && doc.status === "in_progress";
   const canDownload = isInvolved && (doc.status === "completed" || doc.status === "signed");
   const myFields = doc.fields.filter((f) => f.signerId === mySigner?.id);
@@ -308,6 +335,19 @@ export default function DocumentDetail() {
               onClick={() => { setVoidReason(""); setVoidOpen(true); }}
             >
               <Ban className="h-4 w-4 mr-1.5" /> {t("doc_void")}
+            </Button>
+          )}
+
+          {canRemind && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={reminding}
+              onClick={handleRemind}
+            >
+              {reminding
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />{t("doc_reminding")}</>
+                : <><BellRing className="h-4 w-4 mr-1.5" />{t("doc_remind")}</>}
             </Button>
           )}
 
