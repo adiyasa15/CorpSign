@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { documentsTable, signaturesTable, activityTable, usersTable, documentSignersTable } from "@workspace/db";
-import { and, eq, gte, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, notInArray, or, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -112,12 +112,55 @@ router.get("/dashboard/recent", async (req, res) => {
     return;
   }
   try {
-    const activity = await db
-      .select()
-      .from(activityTable)
-      .where(eq(activityTable.userId, req.user.id))
-      .orderBy(sql`${activityTable.timestamp} desc`)
-      .limit(20);
+    const user = req.user;
+    let activity;
+
+    if (canSeeAllDocs(user.role)) {
+      // Admins / superadmins see all activity across the system
+      activity = await db
+        .select()
+        .from(activityTable)
+        .orderBy(desc(activityTable.timestamp))
+        .limit(20);
+    } else {
+      // Regular users & approvers: see activity on any document they are
+      // involved with — docs they uploaded OR docs they are a signer on
+      const ownedDocIds = await db
+        .select({ id: documentsTable.id })
+        .from(documentsTable)
+        .where(eq(documentsTable.uploadedById, user.id))
+        .then((rows) => rows.map((r) => r.id));
+
+      const signerDocIds = await db
+        .select({ documentId: documentSignersTable.documentId })
+        .from(documentSignersTable)
+        .where(eq(documentSignersTable.email, user.email))
+        .then((rows) => rows.map((r) => r.documentId));
+
+      const involvedIds = [...new Set([...ownedDocIds, ...signerDocIds])];
+
+      if (involvedIds.length === 0) {
+        // No documents at all — return their own actions only
+        activity = await db
+          .select()
+          .from(activityTable)
+          .where(eq(activityTable.userId, user.id))
+          .orderBy(desc(activityTable.timestamp))
+          .limit(20);
+      } else {
+        activity = await db
+          .select()
+          .from(activityTable)
+          .where(
+            or(
+              eq(activityTable.userId, user.id),
+              inArray(activityTable.documentId, involvedIds),
+            ),
+          )
+          .orderBy(desc(activityTable.timestamp))
+          .limit(20);
+      }
+    }
 
     res.json(
       activity.map((a) => ({
