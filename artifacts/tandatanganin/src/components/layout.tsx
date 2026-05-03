@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
   FileText, LayoutDashboard, PenTool, Settings, Users, LogOut,
-  PenLine, Upload, ChevronUp, ShieldCheck, Menu, X, ChevronDown, Check,
+  PenLine, Upload, ChevronUp, ShieldCheck, Menu, X, ChevronDown, Check, ServerCog,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
@@ -109,6 +109,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   if (user?.role === "superadmin") {
     navItems.splice(4, 0, { name: t("nav_privileges"), href: "/privileges", icon: ShieldCheck });
+    navItems.splice(5, 0, { name: t("nav_provisioning"), href: "/provisioning", icon: ServerCog });
   }
 
   const getInitials = (name?: string) => {

@@ -8,3 +8,5 @@ export * from "./signature-templates";
 export * from "./document-audit";
 export * from "./document-cc";
 export * from "./privileges";
+export * from "./packages";
+export * from "./user-groups";

@@ -329,4 +329,9 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   login_password: "Kata Sandi",
   login_btn: "Masuk",
   login_contact: "Hubungi administrator Anda untuk mendapatkan akun",
+
+  // ── Provisioning ─────────────────────────────────────
+  nav_provisioning: "Provisioning",
+  prov_title: "Provisioning",
+  prov_subtitle: "Kelola paket, grup pengguna, dan permintaan pendaftaran.",
 };

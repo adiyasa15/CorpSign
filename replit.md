@@ -41,7 +41,8 @@ Project: **Tandatanganin** — a digital signature web application.
 - **approver**: Read-only — sees only signed docs they were assigned to, can download
 
 ### Pages (Frontend)
-- `/login` — Google SSO + local login form
+- `/login` — Google SSO + local login form (with "sign up here" link)
+- `/register` — Public signup: Free Trial tab or Subscribe tab (join existing group)
 - `/` — Dashboard with stats and activity feed
 - `/documents` — Document list with filter/search, role-aware actions
 - `/documents/upload` — PDF-only drag & drop upload page
@@ -52,6 +53,8 @@ Project: **Tandatanganin** — a digital signature web application.
 - `/signature-settings` — Template management for signature/initial/stamp (draw & save)
 - `/users` — User Management CRUD (admin/superadmin only)
 - `/settings` — Settings page
+- `/privileges` — Role capabilities and system limits (superadmin only)
+- `/provisioning` — Package + User Group management + Signup Requests (superadmin only)
 
 ### Signing Workflow
 1. Upload PDF → creates document in `draft` status
@@ -68,13 +71,28 @@ Project: **Tandatanganin** — a digital signature web application.
 ## Database Schema
 
 Tables: `users`, `documents`, `signatures`, `activity`, `user_sessions`,
-        `document_signers`, `document_fields`, `signature_templates`, `document_audit_log`
+        `document_signers`, `document_fields`, `signature_templates`, `document_audit_log`,
+        `packages`, `user_groups`
 
 ### users
 - id, name, email (unique), phone, company_name, division
 - role: superadmin | admin | user | approver
 - google_id (nullable), password_hash (nullable)
+- is_active, pending_approval, group_id (FK → user_groups, nullable), is_group_owner
+- created_at, updated_at
+
+### packages
+- id, name, description, type: free_trial | subscribed | custom
+- max_documents (nullable = unlimited), max_signers_per_doc (nullable = unlimited, includes CC)
+- max_upload_mb, max_uploader_users, max_total_users, active_days
 - is_active, created_at, updated_at
+- Default seeded: "Free Trial 14 Days" (5 docs, 5 signers, 5MB, 14d) and "Subscribed — Standard" (10MB, 3 uploaders, 10 users, 30d)
+
+### user_groups
+- id, name (unique), company_name, package_id (FK → packages)
+- is_active, expires_at, activated_at, created_at, updated_at
+- Free trial groups auto-created on signup (name prefixed "free_trial_")
+- Subscribed groups created by superadmin, users join by group name
 
 ### documents
 - id, title, description, file_name, file_size

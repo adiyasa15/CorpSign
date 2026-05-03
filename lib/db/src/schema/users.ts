@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, pgEnum, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, pgEnum, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,8 @@ export const usersTable = pgTable("users", {
   telegramChatId: text("telegram_chat_id"),
   isActive: boolean("is_active").notNull().default(true),
   pendingApproval: boolean("pending_approval").notNull().default(false),
+  groupId: integer("group_id"),
+  isGroupOwner: boolean("is_group_owner").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

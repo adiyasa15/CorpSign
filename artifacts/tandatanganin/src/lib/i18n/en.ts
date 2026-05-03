@@ -327,6 +327,11 @@ export const en = {
   login_password: "Password",
   login_btn: "Sign In",
   login_contact: "Contact your administrator for an account",
+
+  // ── Provisioning ─────────────────────────────────────
+  nav_provisioning: "Provisioning",
+  prov_title: "Provisioning",
+  prov_subtitle: "Manage packages, user groups, and signup requests.",
 };
 
 export type TKeys = keyof typeof en;

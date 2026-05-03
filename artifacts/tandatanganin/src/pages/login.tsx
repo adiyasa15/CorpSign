@@ -162,7 +162,10 @@ export default function Login() {
             </form>
           </CardContent>
           <CardFooter className="flex justify-center border-t border-border/50 py-4 text-sm text-muted-foreground">
-            Contact your administrator for an account
+            <span>
+            Contact your administrator for an account, or{" "}
+            <a href="/register" className="text-primary underline underline-offset-2 font-medium">sign up here</a>
+          </span>
           </CardFooter>
         </Card>
       </div>

@@ -9,6 +9,8 @@ import signaturesRouter from "./signatures";
 import dashboardRouter from "./dashboard";
 import usersRouter from "./users";
 import privilegesRouter from "./privileges";
+import packagesRouter from "./packages";
+import userGroupsRouter from "./user-groups";
 
 const router: IRouter = Router();
 
@@ -22,5 +24,7 @@ router.use(signaturesRouter);
 router.use(dashboardRouter);
 router.use(usersRouter);
 router.use(privilegesRouter);
+router.use(packagesRouter);
+router.use(userGroupsRouter);
 
 export default router;

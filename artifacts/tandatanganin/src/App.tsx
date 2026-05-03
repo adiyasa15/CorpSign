@@ -19,8 +19,10 @@ import SignatureSettings from "@/pages/signature-settings";
 import Signatures from "@/pages/signatures";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import Users from "@/pages/users";
 import Privileges from "@/pages/privileges";
+import Provisioning from "@/pages/provisioning";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +37,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route>
         <ProtectedRoute>
           <Switch>
@@ -52,6 +55,7 @@ function Router() {
                   <Route path="/signature-settings" component={SignatureSettings} />
                   <Route path="/users" component={Users} />
                   <Route path="/privileges" component={Privileges} />
+                  <Route path="/provisioning" component={Provisioning} />
                   <Route component={NotFound} />
                 </Switch>
               </Layout>
