@@ -309,6 +309,12 @@ export const id: Record<TKeys, string | ((...args: any[]) => string)> = {
   priv_role_admin: "Admin",
   priv_role_user: "Pengguna",
   priv_role_approver: "Penyetuju",
+  priv_reminder_title: "Notifikasi Pengingat",
+  priv_reminder_desc: "Ingatkan penandatangan yang belum bertindak setelah penundaan yang ditentukan. Atur ke 0 jam 0 menit untuk menonaktifkan.",
+  priv_reminder_hours: "Jam",
+  priv_reminder_minutes: "Menit",
+  priv_reminder_label: "Kirim pengingat setelah",
+  priv_reminder_hint: "Pengingat dikirim sekali per penandatangan yang tertunda. Atur keduanya ke 0 untuk menonaktifkan.",
 
   // ── Login ────────────────────────────────────────────
   login_title: "Selamat datang kembali",

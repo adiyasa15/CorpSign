@@ -70,6 +70,8 @@ const UpdatePrivilegesBody = z.object({
     user: RoleCapabilitiesSchema,
     approver: RoleCapabilitiesSchema,
   }),
+  reminderDelayHours: z.number().int().min(0).max(720),
+  reminderDelayMinutes: z.number().int().min(0).max(59),
 });
 
 router.put("/privileges", requireSuperAdmin, async (req, res) => {
@@ -87,6 +89,8 @@ router.put("/privileges", requireSuperAdmin, async (req, res) => {
         maxUsersPerAdmin: parsed.data.maxUsersPerAdmin,
         maxUploadSizeMb: parsed.data.maxUploadSizeMb,
         roleCapabilities: parsed.data.roleCapabilities,
+        reminderDelayHours: parsed.data.reminderDelayHours,
+        reminderDelayMinutes: parsed.data.reminderDelayMinutes,
         updatedAt: new Date(),
       })
       .where(eq(privilegesTable.id, priv.id))

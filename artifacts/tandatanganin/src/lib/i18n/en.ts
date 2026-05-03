@@ -307,6 +307,12 @@ export const en = {
   priv_role_admin: "Admin",
   priv_role_user: "User",
   priv_role_approver: "Approver",
+  priv_reminder_title: "Reminder Notifications",
+  priv_reminder_desc: "Automatically remind signers who haven't acted after the specified delay. Set to 0 hours 0 minutes to disable.",
+  priv_reminder_hours: "Hours",
+  priv_reminder_minutes: "Minutes",
+  priv_reminder_label: "Send reminder after",
+  priv_reminder_hint: "Reminders are sent once per pending signer. Set both to 0 to disable.",
 
   // ── Login ────────────────────────────────────────────
   login_title: "Welcome back",

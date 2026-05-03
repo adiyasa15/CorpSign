@@ -271,6 +271,28 @@ export async function notifyDocumentRejected(opts: {
   }
 }
 
+export async function sendReminderEmail(opts: {
+  signerName: string;
+  signerEmail: string;
+  docId: number;
+  docTitle: string;
+  uploaderName: string;
+}) {
+  const { signerName, signerEmail, docId, docTitle, uploaderName } = opts;
+  const link = docLink(docId);
+  const html = baseLayout("Action", `
+    <h2 style="margin:0 0 8px;font-size:20px;color:#111">Reminder: Pending Signature Required</h2>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:14px">Hi ${signerName}, this is a friendly reminder that your signature is still pending on the following document.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:8px">
+      <tr><td style="font-size:13px;color:#374151"><strong>Document:</strong> ${docTitle}</td></tr>
+      <tr><td style="font-size:13px;color:#374151;padding-top:6px"><strong>Requested by:</strong> ${uploaderName}</td></tr>
+    </table>
+    <p style="font-size:13px;color:#6b7280">Please take action at your earliest convenience.</p>
+    ${btn("Open & Sign Document", link, "#d97706")}
+  `);
+  await send(signerEmail, subjectLine("Action", `Reminder — ${docTitle}`), html);
+}
+
 export async function notifyDocumentVoided(opts: {
   docId: number;
   docTitle: string;

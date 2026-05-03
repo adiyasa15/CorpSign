@@ -11,6 +11,7 @@ export const documentSignersTable = pgTable("document_signers", {
   color: text("color").notNull().default("#2563eb"),
   completedAt: timestamp("completed_at"),
   notified: boolean("notified").notNull().default(false),
+  reminderSentAt: timestamp("reminder_sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

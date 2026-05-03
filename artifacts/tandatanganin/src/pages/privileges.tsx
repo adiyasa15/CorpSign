@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocation } from "wouter";
-import { ShieldCheck, Users, HardDrive, Loader2 } from "lucide-react";
+import { ShieldCheck, Users, HardDrive, Loader2, Bell } from "lucide-react";
 type RoleCapabilities = {
   addUser: boolean;
   uploadDocument: boolean;
@@ -56,6 +56,8 @@ export default function Privileges() {
   const [maxUsers, setMaxUsers] = useState(50);
   const [maxUploadMb, setMaxUploadMb] = useState<number>(10);
   const [caps, setCaps] = useState<AllRoleCapabilities>(DEFAULT_CAPS);
+  const [reminderHours, setReminderHours] = useState(24);
+  const [reminderMinutes, setReminderMinutes] = useState(0);
 
   useEffect(() => {
     if (user && user.role !== "superadmin") {
@@ -71,6 +73,8 @@ export default function Privileges() {
         setMaxUsers(data.maxUsersPerAdmin ?? 50);
         setMaxUploadMb(data.maxUploadSizeMb ?? 10);
         setCaps(data.roleCapabilities ?? DEFAULT_CAPS);
+        setReminderHours(data.reminderDelayHours ?? 24);
+        setReminderMinutes(data.reminderDelayMinutes ?? 0);
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
@@ -95,6 +99,8 @@ export default function Privileges() {
           maxUsersPerAdmin: maxUsers,
           maxUploadSizeMb: maxUploadMb,
           roleCapabilities: caps,
+          reminderDelayHours: reminderHours,
+          reminderDelayMinutes: reminderMinutes,
         }),
       });
       if (!res.ok) throw new Error("failed");
@@ -184,6 +190,49 @@ export default function Privileges() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reminder notification delay */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" /> {t("priv_reminder_title")}
+            </CardTitle>
+            <CardDescription>{t("priv_reminder_desc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Label>{t("priv_reminder_label")}</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={720}
+                    className="w-24"
+                    value={reminderHours}
+                    onChange={(e) => setReminderHours(Math.max(0, Math.min(720, parseInt(e.target.value) || 0)))}
+                  />
+                  <span className="text-sm text-muted-foreground font-medium">{t("priv_reminder_hours")}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={59}
+                    className="w-24"
+                    value={reminderMinutes}
+                    onChange={(e) => setReminderMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  />
+                  <span className="text-sm text-muted-foreground font-medium">{t("priv_reminder_minutes")}</span>
+                </div>
+                {reminderHours === 0 && reminderMinutes === 0 && (
+                  <span className="text-xs text-orange-500 font-medium">⚠ Disabled</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("priv_reminder_hint")}</p>
             </div>
           </CardContent>
         </Card>

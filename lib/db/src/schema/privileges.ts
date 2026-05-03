@@ -49,6 +49,8 @@ export const privilegesTable = pgTable("privileges", {
   maxUsersPerAdmin: integer("max_users_per_admin").notNull().default(50),
   maxUploadSizeMb: integer("max_upload_size_mb").notNull().default(10),
   roleCapabilities: jsonb("role_capabilities").$type<AllRoleCapabilities>().notNull().$default(() => defaultCapabilities),
+  reminderDelayHours: integer("reminder_delay_hours").notNull().default(24),
+  reminderDelayMinutes: integer("reminder_delay_minutes").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

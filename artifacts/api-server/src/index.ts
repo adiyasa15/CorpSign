@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedSuperAdmin } from "./lib/seed";
+import { startReminderScheduler } from "./lib/reminder";
 
 const rawPort = process.env["PORT"];
 
@@ -29,4 +30,6 @@ app.listen(port, async (err) => {
   } catch (seedErr) {
     logger.error({ err: seedErr }, "Failed to seed superadmin");
   }
+
+  startReminderScheduler();
 });

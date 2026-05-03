@@ -197,6 +197,26 @@ export async function telegramDocumentRejected(opts: {
   await sendToEmails(all, msg);
 }
 
+export async function telegramReminderNotification(opts: {
+  signerEmail: string;
+  signerName: string;
+  docId: number;
+  docTitle: string;
+  uploaderName: string;
+}): Promise<void> {
+  const { signerEmail, signerName, docId, docTitle, uploaderName } = opts;
+  const link = docUrl(docId);
+  await sendToEmail(signerEmail, [
+    `⏰ <b>Reminder: Pending Signature</b>`,
+    ``,
+    `Hi ${signerName}, your signature is still pending.`,
+    `📄 <b>${docTitle}</b>`,
+    `👤 Requested by: ${uploaderName}`,
+    ``,
+    `<a href="${link}">👉 Open &amp; Sign Document</a>`,
+  ].join("\n"));
+}
+
 export async function telegramDocumentVoided(opts: {
   docId: number;
   docTitle: string;
