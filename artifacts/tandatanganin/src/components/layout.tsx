@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
   FileText, LayoutDashboard, PenTool, Settings, Users, LogOut,
-  PenLine, Upload, ChevronUp, ShieldCheck, Menu, X,
+  PenLine, Upload, ChevronUp, ShieldCheck, Menu, X, ChevronDown, Check,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
@@ -19,21 +19,63 @@ import {
   Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 
+function FlagGB({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30" className={cn("rounded-sm shrink-0", className)}>
+      <rect width="60" height="30" fill="#012169" />
+      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" strokeWidth="6" />
+      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" strokeWidth="4" />
+      <path d="M30,0 v30 M0,15 h60" stroke="#fff" strokeWidth="10" />
+      <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" strokeWidth="6" />
+    </svg>
+  );
+}
+
+function FlagID({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20" className={cn("rounded-sm shrink-0", className)}>
+      <rect width="30" height="10" fill="#CE1126" />
+      <rect y="10" width="30" height="10" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
 function LanguageToggle({ compact = false }: { compact?: boolean }) {
   const { language, setLanguage } = useLanguage();
-  const toggle = () => setLanguage(language === "en" ? "id" : "en");
+  const FlagIcon = language === "en" ? FlagGB : FlagID;
   return (
-    <button
-      onClick={toggle}
-      title={language === "en" ? "Switch to Bahasa Indonesia" : "Switch to English"}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors font-medium text-xs text-foreground",
-        compact ? "px-2 py-1" : "px-2.5 py-1.5",
-      )}
-    >
-      <span className="text-sm leading-none">{language === "en" ? "🇬🇧" : "🇮🇩"}</span>
-      <span>{language === "en" ? "EN" : "ID"}</span>
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "flex items-center gap-1.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors font-medium text-xs text-foreground",
+            compact ? "px-2 py-1" : "px-2.5 py-1.5",
+          )}
+        >
+          <FlagIcon className={compact ? "h-3 w-[18px]" : "h-3.5 w-5"} />
+          <span>{language === "en" ? "EN" : "ID"}</span>
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem
+          onClick={() => setLanguage("en")}
+          className={cn("gap-2", language === "en" && "text-primary")}
+        >
+          <FlagGB className="h-3.5 w-5" />
+          <span className="flex-1">English</span>
+          {language === "en" && <Check className="h-3.5 w-3.5" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setLanguage("id")}
+          className={cn("gap-2", language === "id" && "text-primary")}
+        >
+          <FlagID className="h-3.5 w-5" />
+          <span className="flex-1">Indonesia</span>
+          {language === "id" && <Check className="h-3.5 w-3.5" />}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
