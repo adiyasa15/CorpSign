@@ -23,7 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   Package, Users, UserCheck, Plus, Pencil, Trash2, Play, Pause, Eye,
-  Loader2, Building2, CheckCircle, XCircle, Clock,
+  Loader2, Building2, CheckCircle, XCircle, Clock, ArrowUpCircle,
 } from "lucide-react";
 
 type PackageType = "free_trial" | "subscribed" | "custom";
@@ -83,6 +83,21 @@ interface PendingUser {
   groupType?: PackageType;
 }
 
+interface FreeTrialUser {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  companyName: string | null;
+  role: string;
+  isActive: boolean;
+  pendingApproval: boolean;
+  groupId: number | null;
+  groupName: string | null;
+  packageId: number | null;
+  createdAt: string;
+}
+
 const TYPE_LABELS: Record<PackageType, string> = {
   free_trial: "Free Trial",
   subscribed: "Subscribed",
@@ -108,11 +123,13 @@ export default function Provisioning() {
   const [packages, setPackages] = useState<PkgRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [freeTrialUsers, setFreeTrialUsers] = useState<FreeTrialUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [pkgDialog, setPkgDialog] = useState<{ open: boolean; editing: PkgRow | null }>({ open: false, editing: null });
   const [groupDialog, setGroupDialog] = useState<{ open: boolean; editing: GroupRow | null }>({ open: false, editing: null });
   const [membersDialog, setMembersDialog] = useState<{ open: boolean; group: GroupRow | null; members: MemberRow[] }>({ open: false, group: null, members: [] });
+  const [upgradeDialog, setUpgradeDialog] = useState<{ open: boolean; user: FreeTrialUser | null; selectedGroupId: string }>({ open: false, user: null, selectedGroupId: "" });
   const [isSaving, setIsSaving] = useState(false);
   const [isMembersLoading, setIsMembersLoading] = useState(false);
 
@@ -133,25 +150,27 @@ export default function Provisioning() {
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [pkgRes, grpRes, pendRes] = await Promise.all([
+      const [pkgRes, grpRes, pendRes, ftRes] = await Promise.all([
         fetch("/api/packages", { credentials: "include" }),
         fetch("/api/user-groups", { credentials: "include" }),
         fetch("/api/users/pending", { credentials: "include" }),
+        fetch("/api/user-groups/free-trial-users", { credentials: "include" }),
       ]);
-      const [pkgData, grpData, pendData] = await Promise.all([pkgRes.json(), grpRes.json(), pendRes.json()]);
+      const [pkgData, grpData, pendData, ftData] = await Promise.all([pkgRes.json(), grpRes.json(), pendRes.json(), ftRes.json()]);
 
       setPackages(Array.isArray(pkgData) ? pkgData : []);
       setGroups(Array.isArray(grpData) ? grpData : []);
+      setFreeTrialUsers(Array.isArray(ftData) ? ftData : []);
 
       if (Array.isArray(pendData)) {
         const allGroups: GroupRow[] = Array.isArray(grpData) ? grpData : [];
-        const enriched = await Promise.all(pendData.map(async (u: PendingUser) => {
+        const enriched = pendData.map((u: PendingUser) => {
           if (u.groupId) {
             const g = allGroups.find((g) => g.id === u.groupId);
             return { ...u, groupName: g?.name, groupType: g?.package?.type };
           }
           return u;
-        }));
+        });
         setPendingUsers(enriched);
       }
     } catch {
@@ -346,6 +365,34 @@ export default function Provisioning() {
     }
   };
 
+  const openUpgradeDialog = (u: FreeTrialUser) => {
+    setUpgradeDialog({ open: true, user: u, selectedGroupId: "" });
+  };
+
+  const confirmUpgrade = async () => {
+    if (!upgradeDialog.user || !upgradeDialog.selectedGroupId) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/users/${upgradeDialog.user.id}/upgrade-group`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupId: Number(upgradeDialog.selectedGroupId) }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed");
+      }
+      toast({ title: `${upgradeDialog.user.name} upgraded successfully` });
+      setUpgradeDialog({ open: false, user: null, selectedGroupId: "" });
+      fetchAll();
+    } catch (e: unknown) {
+      toast({ title: e instanceof Error ? e.message : "Failed to upgrade user", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -374,6 +421,12 @@ export default function Provisioning() {
             <UserCheck className="h-4 w-4" /> Signup Requests
             {pendingUsers.length > 0 && (
               <Badge variant="destructive" className="ml-1 h-5 min-w-5 px-1 text-[10px]">{pendingUsers.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="upgrade" className="gap-2">
+            <ArrowUpCircle className="h-4 w-4" /> Upgrade Users
+            {freeTrialUsers.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1 text-[10px]">{freeTrialUsers.length}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
@@ -551,6 +604,73 @@ export default function Provisioning() {
                               </AlertDialogContent>
                             </AlertDialog>
                           </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Upgrade Users Tab ── */}
+        <TabsContent value="upgrade">
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Upgrade Free Trial Users</CardTitle>
+              <CardDescription>
+                Move a free trial user to a subscribed or custom group. The user will be activated under the new group's package.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Current Group</TableHead>
+                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead>Registered</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {freeTrialUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          No free trial users found.
+                        </TableCell>
+                      </TableRow>
+                    ) : freeTrialUsers.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-medium">{u.name}</TableCell>
+                        <TableCell className="text-sm">{u.email}</TableCell>
+                        <TableCell className="text-sm">{u.phone}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground italic">
+                          {u.groupName?.startsWith("free_trial_") ? "Auto (free trial)" : (u.groupName ?? "—")}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {u.pendingApproval ? (
+                            <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" />Pending</Badge>
+                          ) : u.isActive ? (
+                            <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" />Active</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1"><XCircle className="h-3 w-3" />Suspended</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">{formatDate(u.createdAt)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1 text-blue-700 border-blue-300 hover:bg-blue-50"
+                            onClick={() => openUpgradeDialog(u)}
+                          >
+                            <ArrowUpCircle className="h-3 w-3" /> Upgrade
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -747,6 +867,79 @@ export default function Provisioning() {
             <Button variant="outline" onClick={() => setGroupDialog({ open: false, editing: null })}>Cancel</Button>
             <Button onClick={saveGroup} disabled={isSaving || !groupForm.name}>
               {isSaving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : "Save Group"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Upgrade Dialog ── */}
+      <Dialog open={upgradeDialog.open} onOpenChange={(open) => setUpgradeDialog((p) => ({ ...p, open }))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowUpCircle className="h-5 w-5 text-blue-600" />
+              Upgrade User to Subscribed
+            </DialogTitle>
+            <DialogDescription>
+              Move <strong>{upgradeDialog.user?.name}</strong> from their free trial group to a subscribed or custom group.
+              They will be activated immediately under the new group's package.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm space-y-1">
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-16 shrink-0">Name:</span>
+                <span className="font-medium">{upgradeDialog.user?.name}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-16 shrink-0">Email:</span>
+                <span>{upgradeDialog.user?.email}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-muted-foreground w-16 shrink-0">Current:</span>
+                <span className="italic text-muted-foreground">
+                  {upgradeDialog.user?.groupName?.startsWith("free_trial_") ? "Auto free trial group" : (upgradeDialog.user?.groupName ?? "None")}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Target Group / Company *</Label>
+              <Select
+                value={upgradeDialog.selectedGroupId || "none"}
+                onValueChange={(v) => setUpgradeDialog((p) => ({ ...p, selectedGroupId: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a subscribed group…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Select a group —</SelectItem>
+                  {groups
+                    .filter((g) => g.package && (g.package.type === "subscribed" || g.package.type === "custom"))
+                    .map((g) => (
+                      <SelectItem key={g.id} value={String(g.id)}>
+                        <div className="flex flex-col">
+                          <span>{g.name}{g.companyName ? ` — ${g.companyName}` : ""}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {g.package!.name} · {g.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {groups.filter((g) => g.package && (g.package.type === "subscribed" || g.package.type === "custom")).length === 0 && (
+                <p className="text-xs text-muted-foreground">No subscribed or custom groups available. Create one in the User Groups tab first.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpgradeDialog({ open: false, user: null, selectedGroupId: "" })}>Cancel</Button>
+            <Button
+              onClick={confirmUpgrade}
+              disabled={isSaving || !upgradeDialog.selectedGroupId}
+              className="gap-2"
+            >
+              {isSaving ? <><Loader2 className="h-4 w-4 animate-spin" />Upgrading…</> : <><ArrowUpCircle className="h-4 w-4" />Confirm Upgrade</>}
             </Button>
           </DialogFooter>
         </DialogContent>

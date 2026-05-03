@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { userGroupsTable, packagesTable, usersTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { eq, count, and, inArray } from "drizzle-orm";
 import { requireSuperAdmin, requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 
@@ -246,6 +246,103 @@ router.patch("/user-groups/:id/members/:userId/suspend", requireAuth, async (req
       .where(eq(usersTable.id, userId))
       .returning();
     res.json({ id: updated.id, isActive: updated.isActive });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/user-groups/free-trial-users", requireSuperAdmin, async (req, res) => {
+  try {
+    const freeTrialPkgs = await db
+      .select({ id: packagesTable.id })
+      .from(packagesTable)
+      .where(eq(packagesTable.type, "free_trial"));
+
+    if (freeTrialPkgs.length === 0) { res.json([]); return; }
+
+    const pkgIds = freeTrialPkgs.map((p) => p.id);
+    const freeTrialGroups = await db
+      .select({ id: userGroupsTable.id, name: userGroupsTable.name, packageId: userGroupsTable.packageId })
+      .from(userGroupsTable)
+      .where(inArray(userGroupsTable.packageId, pkgIds));
+
+    if (freeTrialGroups.length === 0) { res.json([]); return; }
+
+    const groupIds = freeTrialGroups.map((g) => g.id);
+    const users = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        email: usersTable.email,
+        phone: usersTable.phone,
+        companyName: usersTable.companyName,
+        role: usersTable.role,
+        isActive: usersTable.isActive,
+        pendingApproval: usersTable.pendingApproval,
+        groupId: usersTable.groupId,
+        isGroupOwner: usersTable.isGroupOwner,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .where(inArray(usersTable.groupId, groupIds))
+      .orderBy(usersTable.createdAt);
+
+    const result = users.map((u) => {
+      const group = freeTrialGroups.find((g) => g.id === u.groupId);
+      const pkg = freeTrialPkgs.find((p) => p.id === group?.packageId);
+      return {
+        ...u,
+        createdAt: u.createdAt.toISOString(),
+        groupName: group?.name ?? null,
+        packageId: pkg?.id ?? null,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+const UpgradeGroupBody = z.object({
+  groupId: z.number().int().positive(),
+});
+
+router.patch("/users/:id/upgrade-group", requireSuperAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const parsed = UpgradeGroupBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
+      return;
+    }
+
+    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+    const [group] = await db.select().from(userGroupsTable).where(eq(userGroupsTable.id, parsed.data.groupId));
+    if (!group) { res.status(404).json({ error: "Target group not found" }); return; }
+
+    const [updated] = await db.update(usersTable)
+      .set({
+        groupId: parsed.data.groupId,
+        isGroupOwner: false,
+        isActive: true,
+        pendingApproval: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, userId))
+      .returning();
+
+    res.json({
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+      groupId: updated.groupId,
+      isActive: updated.isActive,
+    });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
