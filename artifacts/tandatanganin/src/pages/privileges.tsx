@@ -114,7 +114,7 @@ export default function Privileges() {
 
   if (isLoading) {
     return (
-      <div className="p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 md:p-8 max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
@@ -124,10 +124,10 @@ export default function Privileges() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("priv_title")}</h1>
-        <p className="text-muted-foreground mt-1 text-lg">{t("priv_subtitle")}</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("priv_title")}</h1>
+        <p className="text-muted-foreground mt-1 text-sm md:text-lg">{t("priv_subtitle")}</p>
       </div>
 
       <div className="grid gap-8">

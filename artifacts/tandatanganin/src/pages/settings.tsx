@@ -114,10 +114,10 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("settings_title")}</h1>
-        <p className="text-muted-foreground mt-1 text-lg">{t("settings_subtitle")}</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("settings_title")}</h1>
+        <p className="text-muted-foreground mt-1 text-sm md:text-lg">{t("settings_subtitle")}</p>
       </div>
 
       <div className="grid gap-8">

@@ -95,11 +95,11 @@ export default function Signatures() {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("sigs_title")}</h1>
-          <p className="text-muted-foreground mt-1 text-lg">{t("sigs_subtitle")}</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("sigs_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-lg">{t("sigs_subtitle")}</p>
         </div>
         <Button className="gap-2 shadow-sm" onClick={() => setShowAdd(true)}>
           <Plus className="h-4 w-4" /> {t("sigs_add_btn")}

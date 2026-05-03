@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
   FileText, LayoutDashboard, PenTool, Settings, Users, LogOut,
-  PenLine, Upload, ChevronUp, ShieldCheck,
+  PenLine, Upload, ChevronUp, ShieldCheck, Menu, X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
@@ -14,6 +15,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet, SheetContent, SheetTrigger,
+} from "@/components/ui/sheet";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -21,6 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
   const logoutMutation = useLogout();
   const queryClient = useQueryClient();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
@@ -51,107 +56,146 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
   };
 
+  const SidebarNav = ({ onNavigate }: { onNavigate?: () => void }) => (
+    <>
+      <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4 px-2">
+          {t("nav_menu")}
+        </div>
+        {navItems.map((item) => {
+          const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
+              )}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {item.name}
+            </Link>
+          );
+        })}
+
+        {user?.role !== "approver" && (
+          <div className="pt-4">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
+              {t("nav_quick_actions")}
+            </div>
+            <Link
+              href="/documents/upload"
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                location === "/documents/upload"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
+              )}
+            >
+              <Upload className="h-4 w-4 shrink-0" />
+              {t("nav_upload")}
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      <div className="p-4 border-t border-border">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-secondary transition-colors group">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm shrink-0">
+                {getInitials(user?.name)}
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-medium truncate">{user?.name ?? "User"}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+              </div>
+              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-xs text-muted-foreground">{t("nav_signed_in_as")}</p>
+              <p className="text-sm font-medium truncate">{user?.email}</p>
+              <Badge variant="outline" className="capitalize text-xs font-normal mt-1">
+                {user?.role ?? "user"}
+              </Badge>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => { setLocation("/signature-settings"); onNavigate?.(); }}>
+              <PenLine className="h-4 w-4 mr-2" />
+              {t("nav_signature_settings")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setLocation("/settings"); onNavigate?.(); }}>
+              <Settings className="h-4 w-4 mr-2" />
+              {t("nav_account_settings")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive"
+              data-testid="logout-btn"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              {t("nav_logout")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen flex w-full bg-background text-foreground">
-      <aside className="w-64 flex flex-col border-r border-border bg-card">
+      {/* Mobile top bar */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 h-14 flex items-center px-4 border-b border-border bg-card/95 backdrop-blur-sm">
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="mr-3 h-9 w-9">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-72 flex flex-col">
+            <div className="h-14 flex items-center justify-between px-5 border-b border-border shrink-0">
+              <div className="flex items-center gap-2 text-primary">
+                <PenTool className="h-5 w-5" />
+                <span className="font-bold text-base tracking-tight">Tandatanganin</span>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMobileOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 flex flex-col overflow-y-auto">
+              <SidebarNav onNavigate={() => setMobileOpen(false)} />
+            </div>
+          </SheetContent>
+        </Sheet>
+        <div className="flex items-center gap-2 text-primary">
+          <PenTool className="h-5 w-5" />
+          <span className="font-bold text-base tracking-tight">Tandatanganin</span>
+        </div>
+      </header>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-64 flex-col border-r border-border bg-card shrink-0">
         <div className="h-16 flex items-center px-6 border-b border-border">
           <div className="flex items-center gap-2 text-primary">
             <PenTool className="h-6 w-6" />
             <span className="font-bold text-lg tracking-tight">Tandatanganin</span>
           </div>
         </div>
-
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4 px-2">
-            {t("nav_menu")}
-          </div>
-          {navItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
-            );
-          })}
-
-          {user?.role !== "approver" && (
-            <div className="pt-4">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
-                {t("nav_quick_actions")}
-              </div>
-              <Link
-                href="/documents/upload"
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  location === "/documents/upload"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
-                )}
-              >
-                <Upload className="h-4 w-4" />
-                {t("nav_upload")}
-              </Link>
-            </div>
-          )}
-        </nav>
-
-        <div className="p-4 border-t border-border">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-secondary transition-colors group">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm shrink-0">
-                  {getInitials(user?.name)}
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium truncate">{user?.name ?? "User"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
-                </div>
-                <ChevronUp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-56">
-              <div className="px-2 py-1.5">
-                <p className="text-xs text-muted-foreground">{t("nav_signed_in_as")}</p>
-                <p className="text-sm font-medium truncate">{user?.email}</p>
-                <Badge variant="outline" className="capitalize text-xs font-normal mt-1">
-                  {user?.role ?? "user"}
-                </Badge>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setLocation("/signature-settings")}>
-                <PenLine className="h-4 w-4 mr-2" />
-                {t("nav_signature_settings")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLocation("/settings")}>
-                <Settings className="h-4 w-4 mr-2" />
-                {t("nav_account_settings")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-destructive focus:text-destructive"
-                data-testid="logout-btn"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                {t("nav_logout")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <SidebarNav />
       </aside>
 
+      {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pt-14 lg:pt-0">
           {children}
         </div>
       </main>

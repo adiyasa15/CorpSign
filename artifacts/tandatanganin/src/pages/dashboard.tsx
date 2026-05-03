@@ -16,15 +16,15 @@ export default function Dashboard() {
   const isAdminOrAbove = user?.role === "admin" || user?.role === "superadmin";
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("dashboard_title")}</h1>
-          <p className="text-muted-foreground mt-1 text-lg">{t("dashboard_subtitle")}</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("dashboard_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-lg">{t("dashboard_subtitle")}</p>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:gap-6 grid-cols-2 lg:grid-cols-4">
         <StatCard
           title={t("dashboard_total_documents")}
           value={summary?.totalDocuments}
@@ -65,8 +65,8 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 shadow-sm">
+      <div className="grid gap-4 md:gap-6 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="md:col-span-2 lg:col-span-4 shadow-sm">
           <CardHeader>
             <CardTitle>{t("dashboard_recent_activity")}</CardTitle>
             <CardDescription>
@@ -111,7 +111,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3 shadow-sm flex flex-col">
+        <Card className="md:col-span-2 lg:col-span-3 shadow-sm flex flex-col">
           <CardHeader>
             <CardTitle>{t("dashboard_signature_profiles")}</CardTitle>
             <CardDescription>

@@ -262,11 +262,11 @@ export default function DocumentDetail() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-10 w-2/3" />
-        <div className="grid grid-cols-3 gap-6">
-          <Skeleton className="col-span-2 h-96" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          <Skeleton className="md:col-span-2 h-96" />
           <Skeleton className="h-72" />
         </div>
       </div>
@@ -275,7 +275,7 @@ export default function DocumentDetail() {
 
   if (!doc) {
     return (
-      <div className="p-8 text-center py-20">
+      <div className="p-4 sm:p-8 text-center py-20">
         <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
         <h2 className="text-xl font-bold">Document not found</h2>
         <Button className="mt-4" onClick={() => setLocation("/documents")}>
@@ -301,7 +301,7 @@ export default function DocumentDetail() {
   const myUnfilledFields = myFields.filter((f) => !f.filledImage);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5 sm:space-y-6">
       <Button variant="ghost" size="sm" onClick={() => setLocation("/documents")} className="-ml-2">
         <ArrowLeft className="h-4 w-4 mr-1" /> {t("doc_back")}
       </Button>
@@ -313,7 +313,7 @@ export default function DocumentDetail() {
             {doc.fileName} · {formatBytes(doc.fileSize)} · Added {formatDate(doc.createdAt)}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap mt-2 sm:mt-0">
           {getStatusBadge(doc.status, t)}
 
           {canEdit && (
@@ -386,7 +386,7 @@ export default function DocumentDetail() {
         <p className="text-sm text-muted-foreground border-l-2 border-border pl-3">{doc.description}</p>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader className="border-b pb-3">

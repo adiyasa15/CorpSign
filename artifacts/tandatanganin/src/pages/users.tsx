@@ -490,11 +490,11 @@ export default function Users() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">{t("users_title")}</h1>
-          <p className="text-muted-foreground mt-1 text-lg">{t("users_subtitle")}</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">{t("users_title")}</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-lg">{t("users_subtitle")}</p>
         </div>
         <Button
           className="gap-2"
@@ -551,8 +551,8 @@ export default function Users() {
             </div>
           </div>
 
-          <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm">
-            <Table>
+          <div className="bg-card rounded-lg border border-border overflow-hidden shadow-sm overflow-x-auto">
+            <Table className="min-w-[640px]">
               <TableHeader className="bg-secondary/50">
                 <TableRow>
                   <TableHead>{t("users_col_name")}</TableHead>
