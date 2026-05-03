@@ -1,3 +1,11 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <!-- pen body -->
+  <rect x="62" y="20" width="56" height="88" rx="12" fill="white" opacity="0.95"/>
+  <!-- pen nib -->
+  <path d="M74 108 L90 148 L106 108 Z" fill="white" opacity="0.95"/>
+  <!-- pen clip line -->
+  <rect x="88" y="28" width="4" height="72" rx="2" fill="#FF3C00" opacity="0.5"/>
+  <!-- pen tip dot -->
+  <circle cx="90" cy="148" r="4" fill="white"/>
 </svg>

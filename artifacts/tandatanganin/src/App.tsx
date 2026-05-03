@@ -7,6 +7,7 @@ import { Layout } from "@/components/layout";
 import { AuthProvider } from "@/contexts/auth-context";
 import { LanguageProvider } from "@/contexts/language-context";
 import { ProtectedRoute } from "@/components/protected-route";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 
 import Dashboard from "@/pages/dashboard";
 import Documents from "@/pages/documents";
@@ -72,6 +73,7 @@ function App() {
             <Router />
           </WouterRouter>
           <Toaster />
+          <PwaInstallPrompt />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
