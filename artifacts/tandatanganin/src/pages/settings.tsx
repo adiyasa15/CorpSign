@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { User, Bell, Shield, Globe, Send } from "lucide-react";
+import { User, Bell, Shield, Send } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -62,7 +62,7 @@ function splitPhone(full: string): { code: string; local: string } {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const { user, isLoading, refetch } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -192,33 +192,6 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" /> {t("settings_language_title")}
-            </CardTitle>
-            <CardDescription>{t("settings_language_desc")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-3">
-              {(["en", "id"] as const).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setLanguage(lang)}
-                  className={cn(
-                    "flex items-center gap-2 px-5 py-3 rounded-lg border-2 text-sm font-medium transition-all",
-                    language === lang
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                  )}
-                >
-                  <span className="text-base">{lang === "en" ? "🇬🇧" : "🇮🇩"}</span>
-                  {t(lang === "en" ? "settings_language_en" : "settings_language_id")}
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
 
         <Card className="shadow-sm">
           <CardHeader>

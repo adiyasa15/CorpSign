@@ -19,6 +19,24 @@ import {
   Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 
+function LanguageToggle({ compact = false }: { compact?: boolean }) {
+  const { language, setLanguage } = useLanguage();
+  const toggle = () => setLanguage(language === "en" ? "id" : "en");
+  return (
+    <button
+      onClick={toggle}
+      title={language === "en" ? "Switch to Bahasa Indonesia" : "Switch to English"}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors font-medium text-xs text-foreground",
+        compact ? "px-2 py-1" : "px-2.5 py-1.5",
+      )}
+    >
+      <span className="text-sm leading-none">{language === "en" ? "🇬🇧" : "🇮🇩"}</span>
+      <span>{language === "en" ? "EN" : "ID"}</span>
+    </button>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
@@ -176,19 +194,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </SheetContent>
         </Sheet>
-        <div className="flex items-center gap-2 text-primary">
-          <PenTool className="h-5 w-5" />
-          <span className="font-bold text-base tracking-tight">Tandatanganin</span>
+        <div className="flex items-center gap-2 text-primary flex-1 min-w-0">
+          <PenTool className="h-5 w-5 shrink-0" />
+          <span className="font-bold text-base tracking-tight truncate">Tandatanganin</span>
         </div>
+        <LanguageToggle compact />
       </header>
 
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 flex-col border-r border-border bg-card shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-border">
+        <div className="h-16 flex items-center justify-between px-5 border-b border-border">
           <div className="flex items-center gap-2 text-primary">
             <PenTool className="h-6 w-6" />
             <span className="font-bold text-lg tracking-tight">Tandatanganin</span>
           </div>
+          <LanguageToggle />
         </div>
         <SidebarNav />
       </aside>
