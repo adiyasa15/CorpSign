@@ -2,6 +2,15 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import {
+  isGcsPath,
+  getSignedGcsPath,
+  uploadDocBuffer,
+  uploadDocBufferAt,
+  downloadDocBuffer,
+  gcsFileExists,
+  deleteDocFromStorage,
+} from "../lib/docStorage";
 import { db } from "@workspace/db";
 import {
   documentsTable,
@@ -96,19 +105,13 @@ async function lookupGeo(ip: string | null | undefined): Promise<string> {
   return clean;
 }
 
+// Keep local uploads dir only for legacy backward-compat reads
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  },
-});
-
+// Use memory storage — files go to GCS after receipt
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // hard ceiling; dynamic check done post-upload
   fileFilter: (_req, file, cb) => {
     if (file.mimetype !== "application/pdf") {
@@ -237,7 +240,6 @@ router.post("/documents/upload", requireAuth, upload.single("file"), async (req,
     // Enforce dynamic upload size limit from privileges
     const maxBytes = await getMaxUploadBytes();
     if (req.file.size > maxBytes) {
-      fs.unlinkSync(req.file.path);
       const maxMb = Math.round(maxBytes / (1024 * 1024));
       res.status(413).json({
         error: "file_too_large",
@@ -249,16 +251,18 @@ router.post("/documents/upload", requireAuth, upload.single("file"), async (req,
 
     const { title, description } = req.body as { title?: string; description?: string };
     if (!title) {
-      fs.unlinkSync(req.file.path);
       res.status(400).json({ error: "Title is required" });
       return;
     }
+
+    // Upload PDF buffer to persistent object storage
+    const gcsPath = await uploadDocBuffer(req.file.buffer, "originals");
 
     const [doc] = await db.insert(documentsTable).values({
       title,
       description: description || null,
       fileName: req.file.originalname,
-      filePath: req.file.filename,
+      filePath: gcsPath,
       fileSize: req.file.size,
       status: "draft",
       signerName: "",
@@ -301,18 +305,27 @@ router.get("/documents/:id/file", requireAuth, async (req, res) => {
       return;
     }
 
-    const signedPath = path.join(UPLOADS_DIR, `signed_${doc.filePath}`);
-    const originalPath = path.join(UPLOADS_DIR, doc.filePath);
-    const filePath = fs.existsSync(signedPath) ? signedPath : originalPath;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${doc.fileName}"`);
 
-    if (!fs.existsSync(filePath)) {
-      res.status(404).json({ error: "File not found on disk" });
+    if (isGcsPath(doc.filePath)) {
+      // Try signed version first, fall back to original
+      const signedPath = getSignedGcsPath(doc.filePath);
+      const useSignedPath = await gcsFileExists(signedPath);
+      const buf = await downloadDocBuffer(useSignedPath ? signedPath : doc.filePath);
+      res.send(buf);
       return;
     }
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${doc.fileName}"`);
-    fs.createReadStream(filePath).pipe(res);
+    // Legacy: local disk
+    const signedLocal = path.join(UPLOADS_DIR, `signed_${doc.filePath}`);
+    const originalLocal = path.join(UPLOADS_DIR, doc.filePath);
+    const localPath = fs.existsSync(signedLocal) ? signedLocal : originalLocal;
+    if (!fs.existsSync(localPath)) {
+      res.status(404).json({ error: "File not found on disk" });
+      return;
+    }
+    fs.createReadStream(localPath).pipe(res);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -345,17 +358,24 @@ router.get("/documents/:id/download", requireAuth, async (req, res) => {
       return;
     }
 
-    const signedPath = path.join(UPLOADS_DIR, `signed_${doc.filePath}`);
-    const originalPath = path.join(UPLOADS_DIR, doc.filePath!);
-    const docPath = fs.existsSync(signedPath) ? signedPath : originalPath;
-
-    if (!fs.existsSync(docPath)) {
-      res.status(404).json({ error: "File not found" });
-      return;
+    // Resolve the best available PDF bytes (signed > original, GCS > local)
+    let docBytes: Buffer;
+    if (isGcsPath(doc.filePath!)) {
+      const signedGcs = getSignedGcsPath(doc.filePath!);
+      const hasSignedGcs = await gcsFileExists(signedGcs);
+      docBytes = await downloadDocBuffer(hasSignedGcs ? signedGcs : doc.filePath!);
+    } else {
+      const signedLocal = path.join(UPLOADS_DIR, `signed_${doc.filePath}`);
+      const originalLocal = path.join(UPLOADS_DIR, doc.filePath!);
+      const localPath = fs.existsSync(signedLocal) ? signedLocal : originalLocal;
+      if (!fs.existsSync(localPath)) {
+        res.status(404).json({ error: "File not found" });
+        return;
+      }
+      docBytes = fs.readFileSync(localPath);
     }
 
     if (mode === "merged") {
-      const docBytes = fs.readFileSync(docPath);
       const cocBytes = await generateCOC(doc, docId);
 
       const mergedPdf = await PDFDocument.create();
@@ -375,7 +395,7 @@ router.get("/documents/:id/download", requireAuth, async (req, res) => {
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="Signed_${doc.fileName}"`);
-    fs.createReadStream(docPath).pipe(res);
+    res.send(docBytes);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -529,10 +549,15 @@ router.delete("/documents/:id", requireAuth, async (req, res) => {
     }
 
     if (existing.filePath) {
-      const filePath = path.join(UPLOADS_DIR, existing.filePath);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      const signedPath = path.join(UPLOADS_DIR, `signed_${existing.filePath}`);
-      if (fs.existsSync(signedPath)) fs.unlinkSync(signedPath);
+      if (isGcsPath(existing.filePath)) {
+        await deleteDocFromStorage(existing.filePath);
+        await deleteDocFromStorage(getSignedGcsPath(existing.filePath));
+      } else {
+        const filePath = path.join(UPLOADS_DIR, existing.filePath);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        const signedPath = path.join(UPLOADS_DIR, `signed_${existing.filePath}`);
+        if (fs.existsSync(signedPath)) fs.unlinkSync(signedPath);
+      }
     }
 
     await db.delete(documentsTable).where(eq(documentsTable.id, params.data.id));
@@ -595,7 +620,14 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
 });
 
 async function generateSignedPDF(docId: number, filePath: string): Promise<string> {
-  const pdfBytes = fs.readFileSync(path.join(UPLOADS_DIR, filePath));
+  // Read original PDF from GCS or legacy local disk
+  let pdfBytes: Buffer;
+  if (isGcsPath(filePath)) {
+    pdfBytes = await downloadDocBuffer(filePath);
+  } else {
+    pdfBytes = fs.readFileSync(path.join(UPLOADS_DIR, filePath));
+  }
+
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
 
@@ -628,7 +660,15 @@ async function generateSignedPDF(docId: number, filePath: string): Promise<strin
     }
   }
 
-  const signedBytes = await pdfDoc.save();
+  const signedBytes = Buffer.from(await pdfDoc.save());
+
+  if (isGcsPath(filePath)) {
+    const signedGcsPath = getSignedGcsPath(filePath);
+    await uploadDocBufferAt(signedBytes, signedGcsPath.slice(4)); // strip "gcs:"
+    return signedGcsPath;
+  }
+
+  // Legacy: write to local disk
   const signedFileName = `signed_${filePath}`;
   fs.writeFileSync(path.join(UPLOADS_DIR, signedFileName), signedBytes);
   return signedFileName;

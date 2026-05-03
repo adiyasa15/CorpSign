@@ -77,7 +77,8 @@ Tables: `users`, `documents`, `signatures`, `activity`, `user_sessions`,
 - is_active, created_at, updated_at
 
 ### documents
-- id, title, description, file_name, file_path (stored in api-server/uploads/), file_size
+- id, title, description, file_name, file_size
+- file_path: GCS object path (`gcs:docs/originals/<uuid>`) for new uploads; legacy local filename for old records
 - status: draft | pending | in_progress | signed | rejected | completed
 - signer_name, signer_email (legacy), uploaded_by_id (FK to users)
 - signed_at, signature_data (base64, legacy), created_at, updated_at
@@ -139,6 +140,17 @@ Tables: `users`, `documents`, `signatures`, `activity`, `user_sessions`,
 - GET `/api/signatures`
 - POST `/api/signatures`
 - DELETE `/api/signatures/:id`
+
+## File Storage (Object Storage / GCS)
+
+All uploaded PDFs are stored in **Replit Object Storage** (GCS bucket `replit-objstore-3725cdf9-5463-404c-936b-599b60dc0875`).
+
+- **Upload**: `multer.memoryStorage()` receives the file buffer; `uploadDocBuffer()` in `lib/docStorage.ts` saves it as `docs/originals/<uuid>` in GCS. DB stores `gcs:docs/originals/<uuid>`.
+- **Signed PDF**: `generateSignedPDF()` reads the original from GCS, embeds signature images, then writes the signed version to `docs/signed/<uuid>` (same UUID). Served transparently.
+- **Serve/Download**: `isGcsPath()` detects new GCS paths; falls back to local `uploads/` disk for legacy documents uploaded before the migration.
+- **Delete**: Deletes both `docs/originals/<uuid>` and `docs/signed/<uuid>` from GCS.
+- **Helper**: `artifacts/api-server/src/lib/docStorage.ts` — `uploadDocBuffer`, `uploadDocBufferAt`, `downloadDocBuffer`, `gcsFileExists`, `deleteDocFromStorage`, `isGcsPath`, `getSignedGcsPath`.
+- **Env vars**: `DEFAULT_OBJECT_STORAGE_BUCKET_ID`, `PRIVATE_OBJECT_DIR`, `PUBLIC_OBJECT_SEARCH_PATHS`
 
 ## Important Notes
 
