@@ -195,6 +195,10 @@ export default function Login() {
                     )
                   )}
                 </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id={rememberMeId} checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)} />
+                  <label htmlFor={rememberMeId} className="text-sm text-muted-foreground cursor-pointer select-none">Remember me</label>
+                </div>
                 <Button type="submit" className="w-full h-11 text-base" disabled={isCheckingEmail || !email.trim()} data-testid="login-submit-btn">
                   {isCheckingEmail ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Checking…</> : "Continue"}
                 </Button>
