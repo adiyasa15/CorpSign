@@ -245,6 +245,17 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       res.status(403).json({ error: "Forbidden" }); return;
     }
 
+    // Sequential signing: all signers with lower signerOrder must be completed first
+    const allSignersForCheck = await db.select().from(documentSignersTable)
+      .where(eq(documentSignersTable.documentId, docId));
+    const prevPending = allSignersForCheck.filter(
+      (s) => s.signerOrder < signer.signerOrder && s.status !== "completed"
+    );
+    if (prevPending.length > 0) {
+      res.status(403).json({ error: "It is not your turn to sign yet. Please wait for the previous signer to complete." });
+      return;
+    }
+
     await db.update(documentFieldsTable).set({ filledImage: imageData, filledAt: new Date() }).where(eq(documentFieldsTable.id, fieldId));
 
     await db.insert(documentAuditTable).values({
@@ -306,7 +317,10 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       const [incompleteDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       const ccEmails = await getCcEmails(docId);
       const uploaderEmail = await getUploaderEmail(incompleteDoc?.uploadedById ?? null);
-      const nextSigner = signers.find((s) => s.status !== "completed" && s.id !== signer.id);
+      // Find the next signer strictly by order (lowest signerOrder among pending)
+      const nextSigner = signers
+        .filter((s) => s.status !== "completed" && s.id !== signer.id)
+        .sort((a, b) => a.signerOrder - b.signerOrder)[0];
       const signerOpts = {
         docId,
         docTitle: incompleteDoc?.title ?? "",

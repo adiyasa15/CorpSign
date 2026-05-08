@@ -637,14 +637,15 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
       userId: user.id,
     });
 
-    // Notify all parties (fire-and-forget)
+    // Notify first signer only (sequential) + uploader + CC (fire-and-forget)
     const ccEmails = await getCcEmails(docId);
+    const firstSigner = [...signers].sort((a, b) => a.signerOrder - b.signerOrder)[0];
     const sentOpts = {
       docId,
       docTitle: doc.title,
       uploaderName: user.name,
       uploaderEmail: user.email,
-      signers: signers.map((s) => ({ name: s.name, email: s.email })),
+      signers: firstSigner ? [{ name: firstSigner.name, email: firstSigner.email }] : [],
       ccEmails,
     };
     notifyDocumentSent(sentOpts).catch(() => {});

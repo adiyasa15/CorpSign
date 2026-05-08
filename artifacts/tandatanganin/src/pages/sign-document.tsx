@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle2, Loader2, PenLine, XCircle, Fingerprint, Stamp, Upload, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, PenLine, XCircle, Fingerprint, Stamp, Upload, X, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -292,7 +292,10 @@ export default function SignDocument() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData }),
       });
-      if (!res.ok) throw new Error("Failed to fill field");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "Failed to fill field");
+      }
       const result = await res.json() as { documentCompleted: boolean };
 
       const updatedFields = fields.map((f) => f.id === field.id ? { ...f, filledImage: imageData } : f);
@@ -348,6 +351,43 @@ export default function SignDocument() {
         <p className="text-muted-foreground">You are not listed as a signer for this document.</p>
         <Button onClick={() => setLocation("/documents")}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Back
+        </Button>
+      </div>
+    );
+  }
+
+  // Sequential signing: block if a previous signer hasn't completed yet
+  const pendingBefore = signers
+    .filter((s) => s.signerOrder < mySigner.signerOrder && s.status !== "completed")
+    .sort((a, b) => a.signerOrder - b.signerOrder);
+  if (pendingBefore.length > 0) {
+    const waitingFor = pendingBefore[0];
+    return (
+      <div className="max-w-lg mx-auto p-8 text-center space-y-4">
+        <Clock className="h-12 w-12 text-amber-500 mx-auto" />
+        <h2 className="text-xl font-bold">Not your turn yet</h2>
+        <p className="text-muted-foreground">
+          Waiting for <strong>{waitingFor.name}</strong> ({waitingFor.email}) to complete their signature first.
+        </p>
+        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-left space-y-1.5">
+          {signers.sort((a, b) => a.signerOrder - b.signerOrder).map((s, i) => (
+            <div key={s.id} className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
+              <span className="font-medium">#{i + 1} {s.name}</span>
+              <span className={`ml-auto text-xs font-semibold px-1.5 py-0.5 rounded ${
+                s.status === "completed"
+                  ? "bg-green-100 text-green-700"
+                  : s.id === mySigner.id
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-muted text-muted-foreground"
+              }`}>
+                {s.status === "completed" ? "✓ Done" : s.id === mySigner.id ? "Your turn next" : "Pending"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <Button onClick={() => setLocation("/documents")}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back to Documents
         </Button>
       </div>
     );
