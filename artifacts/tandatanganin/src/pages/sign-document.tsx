@@ -308,8 +308,8 @@ export default function SignDocument() {
       if (result.documentCompleted) {
         setDone(true);
         setCurrentFieldId(null);
-        await loadDocument();
         setAllDoneDialogOpen(true);
+        loadDocument();
       } else {
         const myUpdated = updatedFields.filter((f) => f.signerId === mySigner?.id);
         if (myUpdated.every((f) => f.filledImage)) {
