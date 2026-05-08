@@ -20,6 +20,7 @@ import Signatures from "@/pages/signatures";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import Verify from "@/pages/verify";
 import Users from "@/pages/users";
 import Privileges from "@/pages/privileges";
 import Provisioning from "@/pages/provisioning";
@@ -38,6 +39,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/verify/:token" component={Verify} />
       <Route>
         <ProtectedRoute>
           <Switch>

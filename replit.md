@@ -68,6 +68,15 @@ Project: **Tandatanganin** — a digital signature web application.
 - Click avatar → dropdown with "Signature Settings" and "Log Out"
 - "Signature Settings" → manage signature/initial/stamp templates per type, set default
 
+### Digital Signing Seal
+- **QR Code Seal**: When enabled, a QR code is embedded in the bottom-right corner of the last PDF page at signing completion. The QR links to the public verification URL.
+- **Invisible Link Seal**: When enabled, invisible clickable URI annotations are placed over each filled signature field. Tapping/clicking a signature area in the PDF opens the verification URL.
+- Both seals are embedded by `generateSignedPDF` in `documents.ts`.
+- Seal settings are configurable per document in the right sidebar "Digital Seal" card (owner/admin only).
+- `PATCH /api/documents/:id/seal` — update `sealQrCode` and/or `sealInvisibleLink` boolean settings; auto-generates `verificationToken` if not set.
+- `GET /api/verify/:token` — **public endpoint** (no auth); returns document authenticity info including signers and completion status.
+- `/verify/:token` — **public frontend page** showing the document authenticity badge, signers, and document details.
+
 ## Database Schema
 
 Tables: `users`, `documents`, `signatures`, `activity`, `user_sessions`,

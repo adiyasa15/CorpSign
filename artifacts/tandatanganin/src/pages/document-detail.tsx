@@ -16,9 +16,11 @@ import {
 import {
   ArrowLeft, AlertCircle, Clock, CheckCircle2, XCircle, FileText,
   Download, ChevronDown, Edit2, PenLine, Users, ClipboardList, Loader2, Trash2, Mail, Ban, BellRing,
+  Shield, QrCode, Link2, Copy,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useLanguage } from "@/contexts/language-context";
@@ -51,6 +53,9 @@ interface DocDetail {
   signers: Signer[];
   fields: Field[];
   cc?: CcRecipient[];
+  verificationToken?: string | null;
+  sealQrCode?: boolean;
+  sealInvisibleLink?: boolean;
 }
 
 interface Signer {
@@ -134,6 +139,7 @@ export default function DocumentDetail() {
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [reminding, setReminding] = useState(false);
+  const [sealSaving, setSealSaving] = useState(false);
 
   useEffect(() => {
     loadDocument();
@@ -233,6 +239,34 @@ export default function DocumentDetail() {
       toast({ variant: "destructive", title: t("doc_remind_error"), description: e.message });
     } finally {
       setReminding(false);
+    }
+  }
+
+  async function handleSealToggle(key: "sealQrCode" | "sealInvisibleLink", value: boolean) {
+    setSealSaving(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/seal`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!res.ok) throw new Error("Failed to update seal settings");
+      const data = await res.json();
+      setDoc((prev) =>
+        prev
+          ? {
+              ...prev,
+              sealQrCode: data.sealQrCode,
+              sealInvisibleLink: data.sealInvisibleLink,
+              verificationToken: data.verificationToken,
+            }
+          : null,
+      );
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Failed to update seal settings", description: e.message });
+    } finally {
+      setSealSaving(false);
     }
   }
 
@@ -496,6 +530,75 @@ export default function DocumentDetail() {
               )}
             </CardContent>
           </Card>
+
+          {(isOwner || isAdmin) && !["voided", "rejected"].includes(doc.status) && (
+            <Card>
+              <CardHeader className="border-b pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-primary" /> Digital Seal
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Seal options embed into the signed PDF when all signers complete.
+                </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <QrCode className="h-3.5 w-3.5 text-muted-foreground" /> QR Code
+                      </p>
+                      <p className="text-xs text-muted-foreground">Placed at last page corner</p>
+                    </div>
+                    <Switch
+                      disabled={sealSaving}
+                      checked={doc.sealQrCode ?? false}
+                      onCheckedChange={(v) => handleSealToggle("sealQrCode", v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <Link2 className="h-3.5 w-3.5 text-muted-foreground" /> Invisible Link
+                      </p>
+                      <p className="text-xs text-muted-foreground">Tap signature area to verify</p>
+                    </div>
+                    <Switch
+                      disabled={sealSaving}
+                      checked={doc.sealInvisibleLink ?? false}
+                      onCheckedChange={(v) => handleSealToggle("sealInvisibleLink", v)}
+                    />
+                  </div>
+                </div>
+                {doc.verificationToken && (
+                  <div className="pt-3 space-y-1.5 border-t">
+                    <p className="text-xs font-medium text-muted-foreground">Verification URL</p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        readOnly
+                        value={`${window.location.origin}/verify/${doc.verificationToken}`}
+                        className="text-xs bg-muted rounded px-2 py-1.5 flex-1 min-w-0 truncate border border-border"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 shrink-0"
+                        title="Copy verification link"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/verify/${doc.verificationToken}`,
+                          );
+                          toast({ title: "Link copied!" });
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {doc.cc && doc.cc.length > 0 && (
             <Card>

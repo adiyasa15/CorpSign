@@ -1,6 +1,7 @@
-import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { randomUUID } from "crypto";
 
 export const documentStatusEnum = pgEnum("document_status", ["pending", "signed", "rejected", "in_progress", "completed", "draft", "voided"]);
 
@@ -18,6 +19,9 @@ export const documentsTable = pgTable("documents", {
   signedAt: timestamp("signed_at"),
   signatureData: text("signature_data"),
   ownerReminderSentAt: timestamp("owner_reminder_sent_at"),
+  verificationToken: text("verification_token").$defaultFn(() => randomUUID()),
+  sealQrCode: boolean("seal_qr_code").notNull().default(false),
+  sealInvisibleLink: boolean("seal_invisible_link").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

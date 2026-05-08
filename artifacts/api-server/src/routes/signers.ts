@@ -276,7 +276,11 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
     if (allSignersComplete) {
       const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       if (doc && doc.filePath) {
-        await generateSignedPDF(docId, doc.filePath);
+        await generateSignedPDF(docId, doc.filePath, {
+          verificationToken: doc.verificationToken,
+          sealQrCode: doc.sealQrCode,
+          sealInvisibleLink: doc.sealInvisibleLink,
+        });
       }
       await db.update(documentsTable).set({ status: "completed", signedAt: new Date(), updatedAt: new Date() }).where(eq(documentsTable.id, docId));
       await db.insert(documentAuditTable).values({

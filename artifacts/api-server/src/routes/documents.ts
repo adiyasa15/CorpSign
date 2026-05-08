@@ -31,7 +31,9 @@ import {
   DeleteDocumentParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFArray, PDFString } from "pdf-lib";
+import QRCode from "qrcode";
+import { randomUUID } from "crypto";
 import {
   notifyDocumentSent,
   notifyDocumentCompleted,
@@ -103,6 +105,42 @@ async function lookupGeo(ip: string | null | undefined): Promise<string> {
     // geo lookup failed — degrade gracefully
   }
   return clean;
+}
+
+function getVerificationUrl(token: string): string {
+  const domains = (process.env.REPLIT_DOMAINS ?? "").split(",").filter(Boolean);
+  const base = domains.length > 0 ? `https://${domains[0]}` : `http://localhost:${process.env.PORT ?? 80}`;
+  return `${base}/verify/${token}`;
+}
+
+function addLinkAnnotation(
+  pdfDoc: PDFDocument,
+  page: ReturnType<PDFDocument["getPages"]>[number],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  url: string,
+) {
+  const annotation = pdfDoc.context.obj({
+    Type: PDFName.of("Annot"),
+    Subtype: PDFName.of("Link"),
+    Rect: pdfDoc.context.obj([x, y, x + w, y + h]),
+    Border: pdfDoc.context.obj([0, 0, 0]),
+    A: pdfDoc.context.obj({
+      Type: PDFName.of("Action"),
+      S: PDFName.of("URI"),
+      URI: PDFString.of(url),
+    }),
+  });
+  const annotRef = pdfDoc.context.register(annotation);
+  const annotsKey = PDFName.of("Annots");
+  const existingAnnots = page.node.lookup(annotsKey);
+  if (existingAnnots instanceof PDFArray) {
+    existingAnnots.push(annotRef);
+  } else {
+    page.node.set(annotsKey, pdfDoc.context.obj([annotRef]));
+  }
 }
 
 // Keep local uploads dir only for legacy backward-compat reads
@@ -619,7 +657,11 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
   }
 });
 
-async function generateSignedPDF(docId: number, filePath: string): Promise<string> {
+async function generateSignedPDF(
+  docId: number,
+  filePath: string,
+  sealOptions?: { verificationToken?: string | null; sealQrCode: boolean; sealInvisibleLink: boolean },
+): Promise<string> {
   // Read original PDF from GCS or legacy local disk
   let pdfBytes: Buffer;
   if (isGcsPath(filePath)) {
@@ -657,6 +699,65 @@ async function generateSignedPDF(docId: number, filePath: string): Promise<strin
       });
     } catch {
       // skip if image embedding fails
+    }
+  }
+
+  // — Seal: Invisible Link Annotations over each filled signature field —
+  if (sealOptions?.sealInvisibleLink && sealOptions.verificationToken) {
+    const verificationUrl = getVerificationUrl(sealOptions.verificationToken);
+    for (const field of filledFields) {
+      const page = pages[field.page];
+      if (!page) continue;
+      const { width: pageWidth, height: pageHeight } = page.getSize();
+      const fieldX = (field.x / 100) * pageWidth;
+      const fieldY = pageHeight - ((field.y / 100) * pageHeight) - ((field.height / 100) * pageHeight);
+      const fieldW = (field.width / 100) * pageWidth;
+      const fieldH = (field.height / 100) * pageHeight;
+      addLinkAnnotation(pdfDoc, page, fieldX, fieldY, fieldW, fieldH, verificationUrl);
+    }
+  }
+
+  // — Seal: QR Code on bottom-right corner of last page —
+  if (sealOptions?.sealQrCode && sealOptions.verificationToken) {
+    const verificationUrl = getVerificationUrl(sealOptions.verificationToken);
+    const lastPage = pages[pages.length - 1];
+    const { width: lw } = lastPage.getSize();
+    try {
+      const qrDataUrl = await QRCode.toDataURL(verificationUrl, {
+        type: "image/png",
+        width: 150,
+        margin: 1,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+      const qrBuffer = Buffer.from(qrDataUrl.replace("data:image/png;base64,", ""), "base64");
+      const qrImage = await pdfDoc.embedPng(qrBuffer);
+      const qrSize = 70;
+      const qrMargin = 15;
+      const qrX = lw - qrSize - qrMargin;
+      const qrLabelY = qrMargin;
+      const qrImageY = qrMargin + 10;
+
+      lastPage.drawRectangle({
+        x: qrX - 5,
+        y: qrLabelY - 3,
+        width: qrSize + 10,
+        height: qrSize + 18,
+        color: rgb(1, 1, 1),
+        borderColor: rgb(0.78, 0.78, 0.78),
+        borderWidth: 0.5,
+      });
+      lastPage.drawImage(qrImage, { x: qrX, y: qrImageY, width: qrSize, height: qrSize });
+      const sealFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      lastPage.drawText("Verify Signature", {
+        x: qrX,
+        y: qrLabelY,
+        size: 6,
+        font: sealFont,
+        color: rgb(0.3, 0.3, 0.3),
+      });
+      addLinkAnnotation(pdfDoc, lastPage, qrX - 5, qrLabelY - 3, qrSize + 10, qrSize + 18, verificationUrl);
+    } catch {
+      // QR embedding failed — skip silently
     }
   }
 
@@ -992,6 +1093,75 @@ router.post("/documents/:id/reject", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/verify/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.verificationToken, token));
+    if (!doc) {
+      res.status(404).json({ error: "Document not found or verification token invalid" });
+      return;
+    }
+    const signers = await db
+      .select()
+      .from(documentSignersTable)
+      .where(eq(documentSignersTable.documentId, doc.id))
+      .orderBy(documentSignersTable.signerOrder);
+
+    res.json({
+      id: doc.id,
+      title: doc.title,
+      fileName: doc.fileName,
+      status: doc.status,
+      signedAt: doc.signedAt?.toISOString() ?? null,
+      createdAt: doc.createdAt.toISOString(),
+      isAuthentic: doc.status === "completed",
+      verificationToken: token,
+      signers: signers.map((s) => ({
+        name: s.name,
+        email: s.email,
+        status: s.status,
+        completedAt: s.completedAt?.toISOString() ?? null,
+      })),
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/documents/:id/seal", requireAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id);
+    const user = req.user!;
+    const { sealQrCode, sealInvisibleLink } = req.body as { sealQrCode?: boolean; sealInvisibleLink?: boolean };
+
+    const [doc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+    if (!doc) { res.status(404).json({ error: "Not found" }); return; }
+
+    const isOwner = doc.uploadedById === user.id;
+    const isAdmin = user.role === "admin" || user.role === "superadmin";
+    if (!isOwner && !isAdmin) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const token = doc.verificationToken ?? randomUUID();
+    const updates: Record<string, unknown> = { verificationToken: token, updatedAt: new Date() };
+    if (typeof sealQrCode === "boolean") updates.sealQrCode = sealQrCode;
+    if (typeof sealInvisibleLink === "boolean") updates.sealInvisibleLink = sealInvisibleLink;
+
+    await db.update(documentsTable).set(updates as Parameters<typeof db.update>[0] extends any ? any : never).where(eq(documentsTable.id, docId));
+    const [updated] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
+
+    res.json({
+      ok: true,
+      verificationToken: updated.verificationToken,
+      sealQrCode: updated.sealQrCode,
+      sealInvisibleLink: updated.sealInvisibleLink,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.post("/documents/:id/sign", requireAuth, async (req, res) => {
   try {
     const docId = Number(req.params.id);
@@ -1041,6 +1211,9 @@ function formatDocument(doc: typeof documentsTable.$inferSelect) {
     uploadedById: doc.uploadedById ?? null,
     signedAt: doc.signedAt?.toISOString() ?? null,
     signatureData: doc.signatureData ?? null,
+    verificationToken: doc.verificationToken ?? null,
+    sealQrCode: doc.sealQrCode,
+    sealInvisibleLink: doc.sealInvisibleLink,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
