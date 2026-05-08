@@ -675,10 +675,10 @@ export default function DocumentEditor() {
                 className="gap-1.5"
               >
                 {([
-                  { value: "none", icon: X, label: "None", desc: "No seal embedded" },
                   { value: "link", icon: Link2, label: "Invisible Link", desc: "Tap signature to verify" },
                   { value: "qr", icon: QrCode, label: "QR Code", desc: "QR on last page after signing" },
                   { value: "both", icon: Shield, label: "Both", desc: "QR code + invisible link" },
+                  { value: "none", icon: X, label: "None", desc: "No seal embedded" },
                 ] as const).map(({ value, icon: Icon, label, desc }) => {
                   const active = getSealMode(doc?.sealQrCode ?? false, doc?.sealInvisibleLink ?? true) === value;
                   return (
