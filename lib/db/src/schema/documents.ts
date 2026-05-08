@@ -21,7 +21,7 @@ export const documentsTable = pgTable("documents", {
   ownerReminderSentAt: timestamp("owner_reminder_sent_at"),
   verificationToken: text("verification_token").$defaultFn(() => randomUUID()),
   sealQrCode: boolean("seal_qr_code").notNull().default(false),
-  sealInvisibleLink: boolean("seal_invisible_link").notNull().default(false),
+  sealInvisibleLink: boolean("seal_invisible_link").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

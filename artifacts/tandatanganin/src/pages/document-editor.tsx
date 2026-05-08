@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, PenLine, Fingerprint, Stamp, Plus, Trash2,
-  Send, Loader2, X, UserPlus, GripVertical, Mail, AlertTriangle,
+  Send, Loader2, X, UserPlus, GripVertical, Mail, AlertTriangle, Shield, QrCode, Link2,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -86,7 +87,12 @@ export default function DocumentEditor() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [doc, setDoc] = useState<{ title: string; status: string; filePath: string | null } | null>(null);
+  const [doc, setDoc] = useState<{
+    title: string; status: string; filePath: string | null;
+    sealQrCode: boolean; sealInvisibleLink: boolean; verificationToken: string | null;
+  } | null>(null);
+  const [sealSaving, setSealSaving] = useState(false);
+  const [qrWarnOpen, setQrWarnOpen] = useState(false);
   const [pages, setPages] = useState<PageImg[]>([]);
   const [signers, setSigners] = useState<Signer[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
@@ -446,6 +452,29 @@ export default function DocumentEditor() {
     }
   };
 
+  const handleSealToggle = async (field: "sealQrCode" | "sealInvisibleLink", value: boolean) => {
+    setSealSaving(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/seal`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) throw new Error("Failed to update seal");
+      const data = await res.json();
+      setDoc((prev) => prev ? {
+        ...prev,
+        sealQrCode: data.sealQrCode,
+        sealInvisibleLink: data.sealInvisibleLink,
+        verificationToken: data.verificationToken,
+      } : prev);
+    } catch {
+      toast({ variant: "destructive", title: "Failed to update seal settings" });
+    } finally {
+      setSealSaving(false);
+    }
+  };
+
   const sendForSigning = async () => {
     if (signers.length === 0) { toast({ variant: "destructive", title: "Add at least one signer" }); return; }
     if (fields.length === 0) { toast({ variant: "destructive", title: "Place at least one field" }); return; }
@@ -455,6 +484,12 @@ export default function DocumentEditor() {
     if (withoutFields.length > 0) {
       setSignersWithoutFields(withoutFields);
       setWarnSignersOpen(true);
+      return;
+    }
+
+    // Warn if QR code seal is enabled
+    if (doc?.sealQrCode) {
+      setQrWarnOpen(true);
       return;
     }
 
@@ -620,6 +655,43 @@ export default function DocumentEditor() {
 
             <Separator />
 
+            {/* Digital Seal */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+                <Shield className="h-3 w-3" /> Digital Seal
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium flex items-center gap-1.5">
+                      <QrCode className="h-3 w-3 text-muted-foreground shrink-0" /> QR Code
+                    </p>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">Embedded on last page after completion</p>
+                  </div>
+                  <Switch
+                    disabled={sealSaving}
+                    checked={doc?.sealQrCode ?? false}
+                    onCheckedChange={(v) => handleSealToggle("sealQrCode", v)}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium flex items-center gap-1.5">
+                      <Link2 className="h-3 w-3 text-muted-foreground shrink-0" /> Invisible Link
+                    </p>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">Tap signature area to verify</p>
+                  </div>
+                  <Switch
+                    disabled={sealSaving}
+                    checked={doc?.sealInvisibleLink ?? true}
+                    onCheckedChange={(v) => handleSealToggle("sealInvisibleLink", v)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
             {/* Fields list */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -772,9 +844,32 @@ export default function DocumentEditor() {
             <AlertDialogCancel onClick={() => setWarnSignersOpen(false)}>Go back and fix</AlertDialogCancel>
             <AlertDialogAction
               className="bg-amber-500 hover:bg-amber-600 text-white"
-              onClick={async () => { setWarnSignersOpen(false); await doSend(); }}
+              onClick={() => {
+                setWarnSignersOpen(false);
+                if (doc?.sealQrCode) { setQrWarnOpen(true); } else { void doSend(); }
+              }}
             >
               Send anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* QR Code seal warning */}
+      <AlertDialog open={qrWarnOpen} onOpenChange={setQrWarnOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <QrCode className="h-5 w-5 text-primary" /> QR Code Seal Enabled
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              A QR code will be embedded in the bottom-right corner of the last page of your document after all signers complete. The QR links to the public verification page. Do you want to proceed with sending?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setQrWarnOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setQrWarnOpen(false); void doSend(); }}>
+              <Send className="h-4 w-4 mr-2" /> Proceed &amp; Send
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
