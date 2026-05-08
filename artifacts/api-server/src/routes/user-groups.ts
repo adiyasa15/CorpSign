@@ -47,15 +47,23 @@ router.get("/user-groups", requireSuperAdmin, async (req, res) => {
   }
 });
 
-router.get("/user-groups/public", async (req, res) => {
+router.get("/user-groups/public", async (_req, res) => {
   try {
     const groups = await db.select({
       id: userGroupsTable.id,
       name: userGroupsTable.name,
       companyName: userGroupsTable.companyName,
-    }).from(userGroupsTable).where(eq(userGroupsTable.isActive, true));
-    res.json(groups);
-  } catch (err) {
+      packageId: userGroupsTable.packageId,
+    }).from(userGroupsTable).where(
+      and(eq(userGroupsTable.isActive, true))
+    );
+
+    const result = groups
+      .filter((g) => !g.name.startsWith("free_trial_"))
+      .map((g) => ({ id: g.id, name: g.name, companyName: g.companyName }));
+
+    res.json(result);
+  } catch {
     res.status(500).json({ error: "Internal server error" });
   }
 });

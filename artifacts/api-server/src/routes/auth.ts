@@ -86,9 +86,10 @@ const RegisterBody = z.object({
   email: z.string().email(),
   phone: z.string().min(1).max(30),
   password: z.string().min(6),
-  type: z.enum(["free_trial", "subscribed"]),
+  type: z.enum(["free_trial", "subscribed", "subscribed_new"]),
   groupName: z.string().optional(),
   companyName: z.string().optional(),
+  packageId: z.number().int().positive().optional(),
 });
 
 router.post("/auth/register", async (req, res) => {
@@ -142,6 +143,43 @@ router.post("/auth/register", async (req, res) => {
       });
 
       res.status(201).json({ ok: true, message: "Registration submitted. Awaiting superadmin activation." });
+    } else if (type === "subscribed_new") {
+      if (!groupName) {
+        res.status(400).json({ error: "Group name is required for a new subscription." });
+        return;
+      }
+
+      const [existingGroup] = await db.select().from(userGroupsTable).where(eq(userGroupsTable.name, groupName));
+      if (existingGroup) {
+        res.status(409).json({ error: "A group with this name already exists. Use 'Existing Subscription' to join it." });
+        return;
+      }
+
+      const pkg = parsed.data.packageId
+        ? (await db.select().from(packagesTable).where(eq(packagesTable.id, parsed.data.packageId)))[0] ?? null
+        : null;
+
+      const [group] = await db.insert(userGroupsTable).values({
+        name: groupName,
+        companyName: companyName ?? null,
+        packageId: pkg?.id ?? null,
+        isActive: false,
+      }).returning();
+
+      await db.insert(usersTable).values({
+        name,
+        email,
+        phone,
+        companyName: companyName ?? null,
+        passwordHash,
+        role: "user",
+        isActive: false,
+        pendingApproval: true,
+        groupId: group.id,
+        isGroupOwner: true,
+      });
+
+      res.status(201).json({ ok: true, message: "New subscription request submitted. Awaiting superadmin activation." });
     } else {
       if (!groupName) {
         res.status(400).json({ error: "Group name is required for subscribed users" });

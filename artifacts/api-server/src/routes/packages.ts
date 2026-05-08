@@ -20,6 +20,19 @@ const PackageBody = z.object({
   isActive: z.boolean().optional(),
 });
 
+router.get("/packages/public", async (_req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(packagesTable)
+      .where(eq(packagesTable.isActive, true))
+      .orderBy(packagesTable.createdAt);
+    res.json(rows.filter((p) => p.type === "subscribed" || p.type === "custom"));
+  } catch {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/packages", requireSuperAdmin, async (req, res) => {
   try {
     const rows = await db.select().from(packagesTable).orderBy(packagesTable.createdAt);
