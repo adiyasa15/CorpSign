@@ -17,10 +17,26 @@ async function getOrCreatePrivileges() {
       maxUsersPerAdmin: 50,
       maxUploadSizeMb: 10,
       roleCapabilities: defaultCapabilities,
+      showFreeTrial: true,
+      showSubscribe: true,
     })
     .returning();
   return inserted[0];
 }
+
+// Fully public: register page needs this before the user logs in
+router.get("/privileges/register-config", async (req, res) => {
+  try {
+    const priv = await getOrCreatePrivileges();
+    res.json({
+      showFreeTrial: priv.showFreeTrial ?? true,
+      showSubscribe: priv.showSubscribe ?? true,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Public limits endpoint (any authenticated user)
 router.get("/privileges/limits", async (req, res) => {
@@ -72,6 +88,8 @@ const UpdatePrivilegesBody = z.object({
   }),
   reminderDelayHours: z.number().int().min(0).max(720),
   reminderDelayMinutes: z.number().int().min(0).max(59),
+  showFreeTrial: z.boolean(),
+  showSubscribe: z.boolean(),
 });
 
 router.put("/privileges", requireSuperAdmin, async (req, res) => {
@@ -91,6 +109,8 @@ router.put("/privileges", requireSuperAdmin, async (req, res) => {
         roleCapabilities: parsed.data.roleCapabilities,
         reminderDelayHours: parsed.data.reminderDelayHours,
         reminderDelayMinutes: parsed.data.reminderDelayMinutes,
+        showFreeTrial: parsed.data.showFreeTrial,
+        showSubscribe: parsed.data.showSubscribe,
         updatedAt: new Date(),
       })
       .where(eq(privilegesTable.id, priv.id))

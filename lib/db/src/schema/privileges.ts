@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
 export const RoleCapabilitiesSchema = z.object({
@@ -51,6 +51,8 @@ export const privilegesTable = pgTable("privileges", {
   roleCapabilities: jsonb("role_capabilities").$type<AllRoleCapabilities>().notNull().$default(() => defaultCapabilities),
   reminderDelayHours: integer("reminder_delay_hours").notNull().default(24),
   reminderDelayMinutes: integer("reminder_delay_minutes").notNull().default(0),
+  showFreeTrial: boolean("show_free_trial").notNull().default(true),
+  showSubscribe: boolean("show_subscribe").notNull().default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

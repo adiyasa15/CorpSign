@@ -68,6 +68,8 @@ export default function Register() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFreeTrial, setShowFreeTrial] = useState(true);
+  const [showSubscribe, setShowSubscribe] = useState(true);
 
   const [freeForm, setFreeForm] = useState({
     name: "", email: "", countryCode: "+62", phone: "", password: "", confirmPassword: "",
@@ -96,6 +98,21 @@ export default function Register() {
     fetch("/api/packages/public")
       .then((r) => r.json())
       .then((data) => setPublicPackages(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    fetch("/api/privileges/register-config")
+      .then((r) => r.json())
+      .then((data) => {
+        const ft = data.showFreeTrial !== false;
+        const sub = data.showSubscribe !== false;
+        setShowFreeTrial(ft);
+        setShowSubscribe(sub);
+        // If current tab is hidden, switch to whichever is visible
+        setActiveTab((prev) => {
+          if (prev === "free_trial" && !ft) return sub ? "subscribed" : "free_trial";
+          if (prev === "subscribed" && !sub) return ft ? "free_trial" : "subscribed";
+          return prev;
+        });
+      })
       .catch(() => {});
   }, []);
 
@@ -240,10 +257,12 @@ export default function Register() {
             )}
 
             <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setError(null); }}>
-              <TabsList className="w-full mb-6">
-                <TabsTrigger value="free_trial" className="flex-1">Free Trial</TabsTrigger>
-                <TabsTrigger value="subscribed" className="flex-1">Subscribe</TabsTrigger>
-              </TabsList>
+              {(showFreeTrial || showSubscribe) && (
+                <TabsList className="w-full mb-6">
+                  {showFreeTrial && <TabsTrigger value="free_trial" className="flex-1">Free Trial</TabsTrigger>}
+                  {showSubscribe && <TabsTrigger value="subscribed" className="flex-1">Subscribe</TabsTrigger>}
+                </TabsList>
+              )}
 
               {/* ── Free Trial Form ── */}
               <TabsContent value="free_trial">

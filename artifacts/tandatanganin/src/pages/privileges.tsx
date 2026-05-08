@@ -11,7 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocation } from "wouter";
-import { ShieldCheck, Users, HardDrive, Loader2, Bell } from "lucide-react";
+import { ShieldCheck, Users, HardDrive, Loader2, Bell, ToggleLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 type RoleCapabilities = {
   addUser: boolean;
   uploadDocument: boolean;
@@ -58,6 +59,8 @@ export default function Privileges() {
   const [caps, setCaps] = useState<AllRoleCapabilities>(DEFAULT_CAPS);
   const [reminderHours, setReminderHours] = useState(24);
   const [reminderMinutes, setReminderMinutes] = useState(0);
+  const [showFreeTrial, setShowFreeTrial] = useState(true);
+  const [showSubscribe, setShowSubscribe] = useState(true);
 
   useEffect(() => {
     if (user && user.role !== "superadmin") {
@@ -75,6 +78,8 @@ export default function Privileges() {
         setCaps(data.roleCapabilities ?? DEFAULT_CAPS);
         setReminderHours(data.reminderDelayHours ?? 24);
         setReminderMinutes(data.reminderDelayMinutes ?? 0);
+        setShowFreeTrial(data.showFreeTrial ?? true);
+        setShowSubscribe(data.showSubscribe ?? true);
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
@@ -101,6 +106,8 @@ export default function Privileges() {
           roleCapabilities: caps,
           reminderDelayHours: reminderHours,
           reminderDelayMinutes: reminderMinutes,
+          showFreeTrial,
+          showSubscribe,
         }),
       });
       if (!res.ok) throw new Error("failed");
@@ -233,6 +240,32 @@ export default function Privileges() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">{t("priv_reminder_hint")}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sign-up page visibility */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ToggleLeft className="h-5 w-5 text-primary" /> Sign-up Page Options
+            </CardTitle>
+            <CardDescription>Control which registration tabs are visible to the public on the sign-up page.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+              <div>
+                <p className="font-medium text-sm">Free Trial tab</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Show the Free Trial registration option</p>
+              </div>
+              <Switch checked={showFreeTrial} onCheckedChange={setShowFreeTrial} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+              <div>
+                <p className="font-medium text-sm">Subscribe tab</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Show the Subscribe registration option</p>
+              </div>
+              <Switch checked={showSubscribe} onCheckedChange={setShowSubscribe} />
             </div>
           </CardContent>
         </Card>
