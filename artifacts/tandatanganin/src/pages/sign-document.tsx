@@ -91,6 +91,8 @@ export default function SignDocument() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
+  const [allDoneDialogOpen, setAllDoneDialogOpen] = useState(false);
+
   const sigPadRef = useRef<DrawingPadHandle | null>(null);
   const sdUploadRef = useRef<HTMLInputElement | null>(null);
 
@@ -304,10 +306,10 @@ export default function SignDocument() {
       setActiveField(null);
 
       if (result.documentCompleted) {
-        toast({ title: "Document complete!", description: "All signers have signed. You can download the signed copy." });
         setDone(true);
         setCurrentFieldId(null);
         await loadDocument();
+        setAllDoneDialogOpen(true);
       } else {
         const myUpdated = updatedFields.filter((f) => f.signerId === mySigner?.id);
         if (myUpdated.every((f) => f.filledImage)) {
@@ -788,6 +790,29 @@ export default function SignDocument() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={allDoneDialogOpen} onOpenChange={setAllDoneDialogOpen}>
+        <AlertDialogContent className="max-w-sm text-center">
+          <AlertDialogHeader className="items-center">
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+              <CheckCircle2 className="h-7 w-7 text-green-600 dark:text-green-400" />
+            </div>
+            <AlertDialogTitle className="text-xl">All signs have been done!</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              Every signer has completed their fields. The signed document is now ready.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-2">
+            <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setLocation("/documents")}
+            >
+              Approve
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
