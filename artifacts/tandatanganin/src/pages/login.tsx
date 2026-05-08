@@ -1,4 +1,4 @@
-import { useState, useRef, useId } from "react";
+import { useState, useRef, useId, useEffect } from "react";
 import { useLocation, Redirect } from "wouter";
 import { useLoginLocal, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,6 +51,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [showSignUp, setShowSignUp] = useState(true);
   const [emailInfo, setEmailInfo] = useState<EmailInfo | null>(null);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -62,6 +63,17 @@ export default function Login() {
   const loginMutation = useLoginLocal();
   const { user, refetch } = useAuth();
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/privileges/register-config")
+      .then((r) => r.json())
+      .then((data) => {
+        const ft = data.showFreeTrial !== false;
+        const sub = data.showSubscribe !== false;
+        setShowSignUp(ft || sub);
+      })
+      .catch(() => {});
+  }, []);
 
   const searchParams = new URLSearchParams(window.location.search);
   const errorCode = searchParams.get("error");
@@ -316,12 +328,14 @@ export default function Login() {
               </div>
             )}
           </CardContent>
-          <CardFooter className="flex justify-center border-t border-border/50 py-4 text-sm text-muted-foreground">
-            <span>
-              Contact your administrator for an account, or{" "}
-              <a href="/register" className="text-primary underline underline-offset-2 font-medium">sign up here</a>
-            </span>
-          </CardFooter>
+          {showSignUp && (
+            <CardFooter className="flex justify-center border-t border-border/50 py-4 text-sm text-muted-foreground">
+              <span>
+                Contact your administrator for an account, or{" "}
+                <a href="/register" className="text-primary underline underline-offset-2 font-medium">sign up here</a>
+              </span>
+            </CardFooter>
+          )}
         </Card>
       </div>
     </div>
