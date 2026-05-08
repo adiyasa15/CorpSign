@@ -81,6 +81,37 @@ router.get("/auth/me", (req, res) => {
   res.json(req.user);
 });
 
+router.post("/auth/check-email", async (req, res) => {
+  try {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!email) { res.status(400).json({ error: "Email required" }); return; }
+
+    const isGmail = email.endsWith("@gmail.com");
+    const isGws = !isGmail && email.includes("@") && !email.endsWith("@gmail.com");
+
+    const [user] = await db.select({
+      id: usersTable.id,
+      googleId: usersTable.googleId,
+      passwordHash: usersTable.passwordHash,
+      isActive: usersTable.isActive,
+      pendingApproval: usersTable.pendingApproval,
+    }).from(usersTable).where(eq(usersTable.email, email));
+
+    res.json({
+      exists: !!user,
+      isGmail,
+      isGws,
+      hasGoogleId: !!(user?.googleId),
+      hasPassword: !!(user?.passwordHash),
+      isActive: user ? user.isActive : null,
+      isPending: user ? user.pendingApproval : null,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 const RegisterBody = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email(),
