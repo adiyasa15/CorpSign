@@ -23,6 +23,7 @@ export const GetMeResponse = zod.object({
 export const LoginLocalBody = zod.object({
   username: zod.string(),
   password: zod.string(),
+  rememberMe: zod.boolean().optional(),
 });
 
 export const LoginLocalResponse = zod.object({

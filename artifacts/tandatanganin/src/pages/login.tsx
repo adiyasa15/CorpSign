@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useId } from "react";
 import { useLocation, Redirect } from "wouter";
 import { useLoginLocal, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PenTool, Loader2, AlertCircle, Clock, ArrowLeft, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
@@ -49,9 +50,11 @@ export default function Login() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [emailInfo, setEmailInfo] = useState<EmailInfo | null>(null);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const rememberMeId = useId();
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -108,7 +111,7 @@ export default function Login() {
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loginMutation.mutate(
-      { data: { username: email, password } },
+      { data: { username: email, password, rememberMe } },
       {
         onSuccess: async () => {
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
@@ -246,6 +249,10 @@ export default function Login() {
                           data-testid="password-input"
                         />
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox id={rememberMeId} checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)} />
+                        <label htmlFor={rememberMeId} className="text-sm text-muted-foreground cursor-pointer select-none">Remember me</label>
+                      </div>
                       <Button type="submit" variant="secondary" className="w-full h-11" disabled={loginMutation.isPending || !password}>
                         {loginMutation.isPending ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Signing in…</> : "Sign In with Password"}
                       </Button>
@@ -284,6 +291,10 @@ export default function Login() {
                       ref={passwordRef}
                       data-testid="password-input"
                     />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox id={rememberMeId} checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)} />
+                    <label htmlFor={rememberMeId} className="text-sm text-muted-foreground cursor-pointer select-none">Remember me</label>
                   </div>
                   <Button
                     type="submit"

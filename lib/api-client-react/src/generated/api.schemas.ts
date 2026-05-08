@@ -142,6 +142,7 @@ export interface AuthUser {
 export interface LoginBody {
   username: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export type UserProfileRole =

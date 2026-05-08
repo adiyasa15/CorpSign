@@ -23,6 +23,13 @@ router.post("/auth/login", (req, res, next) => {
         next(loginErr);
         return;
       }
+      const rememberMe = req.body?.rememberMe === true;
+      if (rememberMe) {
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      } else {
+        req.session.cookie.expires = undefined; // session cookie — cleared on browser close
+        req.session.cookie.maxAge = undefined as unknown as number;
+      }
       req.session.save((saveErr) => {
         if (saveErr) {
           next(saveErr);
