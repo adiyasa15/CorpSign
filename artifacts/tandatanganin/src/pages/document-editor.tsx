@@ -16,7 +16,7 @@ import {
   ArrowLeft, PenLine, Fingerprint, Stamp, Plus, Trash2,
   Send, Loader2, X, UserPlus, GripVertical, Mail, AlertTriangle, Shield, QrCode, Link2,
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -452,13 +452,22 @@ export default function DocumentEditor() {
     }
   };
 
-  const handleSealToggle = async (field: "sealQrCode" | "sealInvisibleLink", value: boolean) => {
+  const getSealMode = (qr: boolean, link: boolean) => {
+    if (qr && link) return "both";
+    if (qr) return "qr";
+    if (link) return "link";
+    return "none";
+  };
+
+  const handleSealRadioChange = async (mode: string) => {
+    const sealQrCode = mode === "qr" || mode === "both";
+    const sealInvisibleLink = mode === "link" || mode === "both";
     setSealSaving(true);
     try {
       const res = await fetch(`/api/documents/${docId}/seal`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify({ sealQrCode, sealInvisibleLink }),
       });
       if (!res.ok) throw new Error("Failed to update seal");
       const data = await res.json();
@@ -660,34 +669,36 @@ export default function DocumentEditor() {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
                 <Shield className="h-3 w-3" /> Digital Seal
               </p>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium flex items-center gap-1.5">
-                      <QrCode className="h-3 w-3 text-muted-foreground shrink-0" /> QR Code
-                    </p>
-                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">Embedded on last page after completion</p>
-                  </div>
-                  <Switch
-                    disabled={sealSaving}
-                    checked={doc?.sealQrCode ?? false}
-                    onCheckedChange={(v) => handleSealToggle("sealQrCode", v)}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium flex items-center gap-1.5">
-                      <Link2 className="h-3 w-3 text-muted-foreground shrink-0" /> Invisible Link
-                    </p>
-                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">Tap signature area to verify</p>
-                  </div>
-                  <Switch
-                    disabled={sealSaving}
-                    checked={doc?.sealInvisibleLink ?? true}
-                    onCheckedChange={(v) => handleSealToggle("sealInvisibleLink", v)}
-                  />
-                </div>
-              </div>
+              <RadioGroup
+                value={getSealMode(doc?.sealQrCode ?? false, doc?.sealInvisibleLink ?? true)}
+                onValueChange={handleSealRadioChange}
+                className="gap-1.5"
+              >
+                {([
+                  { value: "none", icon: X, label: "None", desc: "No seal embedded" },
+                  { value: "link", icon: Link2, label: "Invisible Link", desc: "Tap signature to verify" },
+                  { value: "qr", icon: QrCode, label: "QR Code", desc: "QR on last page after signing" },
+                  { value: "both", icon: Shield, label: "Both", desc: "QR code + invisible link" },
+                ] as const).map(({ value, icon: Icon, label, desc }) => {
+                  const active = getSealMode(doc?.sealQrCode ?? false, doc?.sealInvisibleLink ?? true) === value;
+                  return (
+                    <label
+                      key={value}
+                      htmlFor={`seal-${value}`}
+                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors select-none ${
+                        active ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted"
+                      } ${sealSaving ? "opacity-50 pointer-events-none" : ""}`}
+                    >
+                      <RadioGroupItem value={value} id={`seal-${value}`} disabled={sealSaving} />
+                      <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium leading-tight">{label}</p>
+                        <p className="text-[10px] text-muted-foreground leading-tight">{desc}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </RadioGroup>
             </div>
 
             <Separator />
