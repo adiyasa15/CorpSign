@@ -137,7 +137,18 @@ export const HealthCheckResponse = zod.object({
  * @summary List all documents
  */
 export const ListDocumentsQueryParams = zod.object({
-  status: zod.enum(["pending", "signed", "rejected", "all"]).optional(),
+  status: zod
+    .enum([
+      "all",
+      "draft",
+      "in_progress",
+      "pending",
+      "signed",
+      "completed",
+      "rejected",
+      "voided",
+    ])
+    .optional(),
   search: zod.coerce.string().optional(),
 });
 

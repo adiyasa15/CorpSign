@@ -220,8 +220,12 @@ export type ListDocumentsStatus =
   (typeof ListDocumentsStatus)[keyof typeof ListDocumentsStatus];
 
 export const ListDocumentsStatus = {
+  all: "all",
+  draft: "draft",
+  in_progress: "in_progress",
   pending: "pending",
   signed: "signed",
+  completed: "completed",
   rejected: "rejected",
-  all: "all",
+  voided: "voided",
 } as const;

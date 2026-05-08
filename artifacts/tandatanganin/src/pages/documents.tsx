@@ -48,7 +48,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { formatDate, formatBytes } from "@/lib/format";
-import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical, Download, Ban } from "lucide-react";
+import { Search, Plus, FileText, CheckCircle, Clock, XCircle, MoreVertical, Download, Ban, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +60,8 @@ import { useLanguage } from "@/contexts/language-context";
 
 export default function Documents() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "signed" | "rejected">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "in_progress" | "pending" | "signed" | "completed" | "rejected" | "voided">("all");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -133,9 +134,13 @@ export default function Documents() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("status_all")}</SelectItem>
+            <SelectItem value="draft">{t("status_draft")}</SelectItem>
+            <SelectItem value="in_progress">{t("status_in_progress")}</SelectItem>
             <SelectItem value="pending">{t("status_pending")}</SelectItem>
             <SelectItem value="signed">{t("status_signed")}</SelectItem>
+            <SelectItem value="completed">{t("status_completed")}</SelectItem>
             <SelectItem value="rejected">{t("status_rejected")}</SelectItem>
+            <SelectItem value="voided">{t("status_voided")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -147,7 +152,15 @@ export default function Documents() {
               <TableHead className="w-[300px]">{t("documents_col_title")}</TableHead>
               <TableHead>{t("documents_col_status")}</TableHead>
               <TableHead>{t("documents_col_signers")}</TableHead>
-              <TableHead>{t("documents_col_uploaded")}</TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:text-foreground transition-colors"
+                onClick={() => setSortDir((d) => d === "desc" ? "asc" : "desc")}
+              >
+                <span className="flex items-center gap-1.5">
+                  {t("documents_col_uploaded")}
+                  {sortDir === "desc" ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />}
+                </span>
+              </TableHead>
               <TableHead className="text-right">{t("documents_col_actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -163,7 +176,13 @@ export default function Documents() {
                 </TableRow>
               ))
             ) : documents && documents.length > 0 ? (
-              documents.map((doc) => {
+              [...documents]
+                .sort((a, b) => {
+                  const da = new Date(a.createdAt).getTime();
+                  const db = new Date(b.createdAt).getTime();
+                  return sortDir === "desc" ? db - da : da - db;
+                })
+                .map((doc) => {
                 const isOwner = user?.role === "admin" || user?.role === "superadmin" || !isApprover;
                 return (
                   <TableRow key={doc.id} className="cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => setLocation(`/documents/${doc.id}`)}>

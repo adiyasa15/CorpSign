@@ -206,7 +206,7 @@ router.get("/documents", requireAuth, async (req, res) => {
 
     const conditions = [];
     if (status && status !== "all") {
-      conditions.push(eq(documentsTable.status, status as "pending" | "signed" | "rejected"));
+      conditions.push(eq(documentsTable.status, status as typeof documentsTable.status._.data));
     }
     if (search) {
       conditions.push(
