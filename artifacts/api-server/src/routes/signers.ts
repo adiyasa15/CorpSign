@@ -6,6 +6,7 @@ import { requireAuth } from "../middlewares/auth";
 import { generateSignedPDF, UPLOADS_DIR } from "./documents";
 import { notifySignerCompleted, notifyDocumentCompleted } from "../lib/mailer";
 import { telegramSignerCompleted, telegramDocumentCompleted } from "../lib/telegram";
+import { whatsappSignerCompleted, whatsappDocumentCompleted } from "../lib/whatsapp";
 import fs from "fs";
 import path from "path";
 
@@ -312,6 +313,7 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       };
       notifyDocumentCompleted(completedOpts).catch(() => {});
       telegramDocumentCompleted(completedOpts).catch(() => {});
+      whatsappDocumentCompleted(completedOpts).catch(() => {});
     } else if (allSignerFieldsFilled) {
       // Notify: this signer completed, nudge next pending signer
       const [incompleteDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
@@ -331,6 +333,7 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       };
       notifySignerCompleted(signerOpts).catch(() => {});
       telegramSignerCompleted(signerOpts).catch(() => {});
+      whatsappSignerCompleted(signerOpts).catch(() => {});
     }
 
     res.json({ ok: true, signerCompleted: allSignerFieldsFilled, documentCompleted: allSignersComplete });

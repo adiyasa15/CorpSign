@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, jsonb, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 
 export const RoleCapabilitiesSchema = z.object({
@@ -53,6 +53,8 @@ export const privilegesTable = pgTable("privileges", {
   reminderDelayMinutes: integer("reminder_delay_minutes").notNull().default(0),
   showFreeTrial: boolean("show_free_trial").notNull().default(true),
   showSubscribe: boolean("show_subscribe").notNull().default(true),
+  whatsappEnabled: boolean("whatsapp_enabled").notNull().default(false),
+  whatsappRatePerSecond: real("whatsapp_rate_per_second").notNull().default(1),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

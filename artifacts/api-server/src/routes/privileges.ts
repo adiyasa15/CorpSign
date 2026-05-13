@@ -90,6 +90,8 @@ const UpdatePrivilegesBody = z.object({
   reminderDelayMinutes: z.number().int().min(0).max(59),
   showFreeTrial: z.boolean(),
   showSubscribe: z.boolean(),
+  whatsappEnabled: z.boolean(),
+  whatsappRatePerSecond: z.number().min(0.1).max(10),
 });
 
 router.put("/privileges", requireSuperAdmin, async (req, res) => {
@@ -111,6 +113,8 @@ router.put("/privileges", requireSuperAdmin, async (req, res) => {
         reminderDelayMinutes: parsed.data.reminderDelayMinutes,
         showFreeTrial: parsed.data.showFreeTrial,
         showSubscribe: parsed.data.showSubscribe,
+        whatsappEnabled: parsed.data.whatsappEnabled,
+        whatsappRatePerSecond: parsed.data.whatsappRatePerSecond,
         updatedAt: new Date(),
       })
       .where(eq(privilegesTable.id, priv.id))

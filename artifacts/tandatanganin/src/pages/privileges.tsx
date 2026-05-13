@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/language-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useLocation } from "wouter";
-import { ShieldCheck, Users, HardDrive, Loader2, Bell, ToggleLeft } from "lucide-react";
+import { ShieldCheck, Users, HardDrive, Loader2, Bell, ToggleLeft, MessageCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 type RoleCapabilities = {
   addUser: boolean;
@@ -61,6 +61,8 @@ export default function Privileges() {
   const [reminderMinutes, setReminderMinutes] = useState(0);
   const [showFreeTrial, setShowFreeTrial] = useState(true);
   const [showSubscribe, setShowSubscribe] = useState(true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [whatsappRatePerSecond, setWhatsappRatePerSecond] = useState(1);
 
   useEffect(() => {
     if (user && user.role !== "superadmin") {
@@ -80,6 +82,8 @@ export default function Privileges() {
         setReminderMinutes(data.reminderDelayMinutes ?? 0);
         setShowFreeTrial(data.showFreeTrial ?? true);
         setShowSubscribe(data.showSubscribe ?? true);
+        setWhatsappEnabled(data.whatsappEnabled ?? false);
+        setWhatsappRatePerSecond(data.whatsappRatePerSecond ?? 1);
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
@@ -108,6 +112,8 @@ export default function Privileges() {
           reminderDelayMinutes: reminderMinutes,
           showFreeTrial,
           showSubscribe,
+          whatsappEnabled,
+          whatsappRatePerSecond,
         }),
       });
       if (!res.ok) throw new Error("failed");
@@ -267,6 +273,49 @@ export default function Privileges() {
               </div>
               <Switch checked={showSubscribe} onCheckedChange={setShowSubscribe} />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* WhatsApp Notifications */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-green-600" /> WhatsApp Notifications (Fonnte)
+            </CardTitle>
+            <CardDescription>
+              Send WhatsApp messages to users on document events. Requires a <code className="font-mono bg-muted px-1 rounded">FONNTE_TOKEN</code> secret configured in the environment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+              <div>
+                <p className="font-medium text-sm">Enable WhatsApp notifications</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Send messages via Fonnte when documents are sent, signed, rejected, voided, or reminded</p>
+              </div>
+              <Switch checked={whatsappEnabled} onCheckedChange={setWhatsappEnabled} />
+            </div>
+            {whatsappEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="waRate">Messages per second</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="waRate"
+                    type="number"
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    className="w-32"
+                    value={whatsappRatePerSecond}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v >= 0.1 && v <= 10) setWhatsappRatePerSecond(v);
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">msg/sec (0.1 – 10)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Controls the delay between messages when notifying multiple recipients. Set lower to avoid rate-limit rejections from Fonnte.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

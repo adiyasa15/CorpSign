@@ -4,6 +4,7 @@ import { eq, isNull, isNotNull, and, or, lte, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { sendReminderEmail, sendOwnerPendingReminderEmail } from "./mailer";
 import { telegramReminderNotification, telegramOwnerPendingReminder } from "./telegram";
+import { whatsappReminderNotification, whatsappOwnerPendingReminder } from "./whatsapp";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 
@@ -82,6 +83,14 @@ async function runReminderCheck(): Promise<void> {
           });
 
           await telegramReminderNotification({
+            signerEmail: signer.signerEmail,
+            signerName: signer.signerName,
+            docId: signer.documentId,
+            docTitle: signer.docTitle,
+            uploaderName: signer.uploaderName ?? "the document owner",
+          });
+
+          await whatsappReminderNotification({
             signerEmail: signer.signerEmail,
             signerName: signer.signerName,
             docId: signer.documentId,
@@ -172,6 +181,14 @@ async function runReminderCheck(): Promise<void> {
           });
 
           await telegramOwnerPendingReminder({
+            ownerEmail: doc.ownerEmail,
+            ownerName: doc.ownerName ?? "Document Owner",
+            docId: doc.docId,
+            docTitle: doc.docTitle,
+            pendingSigners: stillPending,
+          });
+
+          await whatsappOwnerPendingReminder({
             ownerEmail: doc.ownerEmail,
             ownerName: doc.ownerName ?? "Document Owner",
             docId: doc.docId,

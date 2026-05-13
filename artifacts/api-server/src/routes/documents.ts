@@ -48,6 +48,12 @@ import {
   telegramDocumentVoided,
   telegramReminderNotification,
 } from "../lib/telegram";
+import {
+  whatsappDocumentSent,
+  whatsappDocumentRejected,
+  whatsappDocumentVoided,
+  whatsappReminderNotification,
+} from "../lib/whatsapp";
 
 const router = Router();
 
@@ -650,6 +656,7 @@ router.post("/documents/:id/send", requireAuth, async (req, res) => {
     };
     notifyDocumentSent(sentOpts).catch(() => {});
     telegramDocumentSent(sentOpts).catch(() => {});
+    whatsappDocumentSent(sentOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {
@@ -968,6 +975,7 @@ router.post("/documents/:id/void", requireAuth, async (req, res) => {
     };
     notifyDocumentVoided(voidedOpts).catch(() => {});
     telegramDocumentVoided(voidedOpts).catch(() => {});
+    whatsappDocumentVoided(voidedOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {
@@ -1017,6 +1025,13 @@ router.post("/documents/:id/remind", requireAuth, async (req, res) => {
         uploaderName,
       }).catch(() => {});
       telegramReminderNotification({
+        signerEmail: signer.email,
+        signerName: signer.name,
+        docId,
+        docTitle: doc.title,
+        uploaderName,
+      }).catch(() => {});
+      whatsappReminderNotification({
         signerEmail: signer.email,
         signerName: signer.name,
         docId,
@@ -1086,6 +1101,7 @@ router.post("/documents/:id/reject", requireAuth, async (req, res) => {
     };
     notifyDocumentRejected(rejectedOpts).catch(() => {});
     telegramDocumentRejected(rejectedOpts).catch(() => {});
+    whatsappDocumentRejected(rejectedOpts).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {
