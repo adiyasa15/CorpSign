@@ -92,6 +92,8 @@ export default function SignDocument() {
   const [rejecting, setRejecting] = useState(false);
 
   const [allDoneDialogOpen, setAllDoneDialogOpen] = useState(false);
+  const [confirmSignOpen, setConfirmSignOpen] = useState(false);
+  const [pendingFill, setPendingFill] = useState<{ imageData: string; field: Field } | null>(null);
 
   const sigPadRef = useRef<DrawingPadHandle | null>(null);
   const sdUploadRef = useRef<HTMLInputElement | null>(null);
@@ -284,9 +286,8 @@ export default function SignDocument() {
     fillField(imageData, activeField);
   };
 
-  const fillField = async (imageData: string, fieldToFill?: Field) => {
-    const field = fieldToFill ?? activeField;
-    if (!field) return;
+  // Actual API submission — used for non-last fields and intermediate fields
+  const doFillField = async (imageData: string, field: Field) => {
     setSubmitting(true);
     try {
       const res = await fetch(`/api/documents/${docId}/fields/${field.id}/fill`, {
@@ -313,11 +314,9 @@ export default function SignDocument() {
       } else {
         const myUpdated = updatedFields.filter((f) => f.signerId === mySigner?.id);
         if (myUpdated.every((f) => f.filledImage)) {
-          toast({ title: "You've signed all your fields!", description: "Waiting for other signers." });
           setDone(true);
           setCurrentFieldId(null);
         } else {
-          // Advance to next pending field in document order
           const nextPending = sortByDocOrder(
             updatedFields.filter((f) => f.signerId === mySigner?.id && !f.filledImage),
           );
@@ -327,11 +326,63 @@ export default function SignDocument() {
           }
         }
       }
-    } catch {
-      toast({ variant: "destructive", title: "Failed to submit signature" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to submit signature";
+      toast({ variant: "destructive", title: msg });
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Intercepts the last field — shows confirm dialog instead of submitting immediately
+  const fillField = async (imageData: string, fieldToFill?: Field) => {
+    const field = fieldToFill ?? activeField;
+    if (!field) return;
+
+    // Count how many of my fields will still be unfilled after this one
+    const remaining = myFields.filter((f) => !f.filledImage && f.id !== field.id);
+    if (remaining.length === 0) {
+      // Last field — pause and ask for confirmation
+      setSignDialogOpen(false);
+      sigPadRef.current?.clear();
+      setPendingFill({ imageData, field });
+      setConfirmSignOpen(true);
+      return;
+    }
+
+    // Not the last field — submit right away
+    await doFillField(imageData, field);
+  };
+
+  // Confirm dialog: user approves → submit last field and go to /documents
+  const handleConfirmApprove = async () => {
+    if (!pendingFill) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/documents/${docId}/fields/${pendingFill.field.id}/fill`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData: pendingFill.imageData }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "Failed to fill field");
+      }
+      setConfirmSignOpen(false);
+      setPendingFill(null);
+      setLocation("/documents");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to submit signature";
+      toast({ variant: "destructive", title: msg });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Confirm dialog: user cancels → discard the pending fill, stay on page
+  const handleConfirmCancel = () => {
+    setPendingFill(null);
+    setConfirmSignOpen(false);
   };
 
   const myFields = fields.filter((f) => f.signerId === mySigner?.id);
@@ -791,6 +842,46 @@ export default function SignDocument() {
         </DialogContent>
       </Dialog>
 
+      {/* Confirm signature submission dialog — shown when signer fills their last field */}
+      <AlertDialog open={confirmSignOpen} onOpenChange={(open) => { if (!open) handleConfirmCancel(); }}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader className="items-center text-center">
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+              <PenLine className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+            </div>
+            <AlertDialogTitle className="text-xl">Submit your signature?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              You have completed all your fields. Review your signature below, then approve to submit — or cancel to go back and re-sign.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingFill && (
+            <div className="border rounded-lg p-3 bg-muted/20 mx-1 my-1 flex items-center justify-center" style={{ minHeight: 80 }}>
+              <img src={pendingFill.imageData} className="max-h-24 max-w-full object-contain" alt="Your signature preview" />
+            </div>
+          )}
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-1">
+            <AlertDialogCancel
+              className="w-full sm:w-auto"
+              disabled={submitting}
+              onClick={handleConfirmCancel}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+              disabled={submitting}
+              onClick={handleConfirmApprove}
+            >
+              {submitting ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting…</>
+              ) : (
+                "Approve & Submit"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={allDoneDialogOpen} onOpenChange={setAllDoneDialogOpen}>
         <AlertDialogContent className="max-w-sm text-center">
           <AlertDialogHeader className="items-center">
@@ -803,12 +894,12 @@ export default function SignDocument() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-2">
-            <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="w-full sm:w-auto">Stay</AlertDialogCancel>
             <AlertDialogAction
               className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
               onClick={() => setLocation("/documents")}
             >
-              Approve
+              Go to Documents
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
