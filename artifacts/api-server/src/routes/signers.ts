@@ -19,10 +19,10 @@ async function getCcEmails(docId: number): Promise<string[]> {
   return rows.map((r) => r.email);
 }
 
-async function getUploaderEmail(uploadedById: number | null): Promise<string | null> {
-  if (!uploadedById) return null;
-  const [u] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, uploadedById));
-  return u?.email ?? null;
+async function getUploaderInfo(uploadedById: number | null): Promise<{ email: string | null; name: string | null }> {
+  if (!uploadedById) return { email: null, name: null };
+  const [u] = await db.select({ email: usersTable.email, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, uploadedById));
+  return { email: u?.email ?? null, name: u?.name ?? null };
 }
 
 const router = Router();
@@ -303,11 +303,11 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       // Notify: document completed
       const [completedDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       const ccEmails = await getCcEmails(docId);
-      const uploaderEmail = await getUploaderEmail(completedDoc?.uploadedById ?? null);
+      const uploaderInfo = await getUploaderInfo(completedDoc?.uploadedById ?? null);
       const completedOpts = {
         docId,
         docTitle: completedDoc?.title ?? "",
-        uploaderEmail: uploaderEmail ?? "",
+        uploaderEmail: uploaderInfo.email ?? "",
         allSignerEmails: signers.map((s) => s.email),
         ccEmails,
       };
@@ -318,7 +318,7 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
       // Notify: this signer completed, nudge next pending signer
       const [incompleteDoc] = await db.select().from(documentsTable).where(eq(documentsTable.id, docId));
       const ccEmails = await getCcEmails(docId);
-      const uploaderEmail = await getUploaderEmail(incompleteDoc?.uploadedById ?? null);
+      const uploaderInfo = await getUploaderInfo(incompleteDoc?.uploadedById ?? null);
       // Find the next signer strictly by order (lowest signerOrder among pending)
       const nextSigner = signers
         .filter((s) => s.status !== "completed" && s.id !== signer.id)
@@ -327,7 +327,8 @@ router.post("/documents/:id/fields/:fieldId/fill", requireAuth, async (req, res)
         docId,
         docTitle: incompleteDoc?.title ?? "",
         signerName: signer.name,
-        uploaderEmail: uploaderEmail ?? "",
+        uploaderName: uploaderInfo.name ?? "the document owner",
+        uploaderEmail: uploaderInfo.email ?? "",
         nextSigner: nextSigner ? { name: nextSigner.name, email: nextSigner.email } : undefined,
         ccEmails,
       };

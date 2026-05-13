@@ -162,11 +162,12 @@ export async function notifySignerCompleted(opts: {
   docId: number;
   docTitle: string;
   signerName: string;
+  uploaderName: string;
   uploaderEmail: string;
   nextSigner?: { name: string; email: string };
   ccEmails: string[];
 }) {
-  const { docId, docTitle, signerName, uploaderEmail, nextSigner, ccEmails } = opts;
+  const { docId, docTitle, signerName, uploaderName, uploaderEmail, nextSigner, ccEmails } = opts;
   const link = docLink(docId);
 
   // INFO → uploader: someone signed
@@ -189,6 +190,7 @@ export async function notifySignerCompleted(opts: {
       <p style="margin:0 0 16px;color:#6b7280;font-size:14px">A previous signer has completed their fields. It is now your turn.</p>
       <table cellpadding="0" cellspacing="0" style="width:100%;background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:8px">
         <tr><td style="font-size:13px;color:#374151"><strong>Document:</strong> ${docTitle}</td></tr>
+        <tr><td style="font-size:13px;color:#374151;padding-top:6px"><strong>Requested by:</strong> ${uploaderName}</td></tr>
         <tr><td style="font-size:13px;color:#374151;padding-top:6px"><strong>Previously signed by:</strong> ${signerName}</td></tr>
       </table>
       ${btn("Open & Sign Document", link, "#d97706")}

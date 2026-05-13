@@ -110,11 +110,12 @@ export async function telegramSignerCompleted(opts: {
   docId: number;
   docTitle: string;
   signerName: string;
+  uploaderName: string;
   uploaderEmail: string;
   nextSigner?: { name: string; email: string };
   ccEmails: string[];
 }): Promise<void> {
-  const { docId, docTitle, signerName, uploaderEmail, nextSigner, ccEmails } = opts;
+  const { docId, docTitle, signerName, uploaderName, uploaderEmail, nextSigner, ccEmails } = opts;
   const link = docUrl(docId);
 
   await sendToEmail(uploaderEmail, [
@@ -132,6 +133,7 @@ export async function telegramSignerCompleted(opts: {
       `✍️ <b>Action Required: It's Your Turn to Sign</b>`,
       ``,
       `📄 <b>${docTitle}</b>`,
+      `👤 Requested by: ${uploaderName}`,
       `👆 ${signerName} has already signed. You're next.`,
       ``,
       `<a href="${link}">👉 Open &amp; Sign Document</a>`,

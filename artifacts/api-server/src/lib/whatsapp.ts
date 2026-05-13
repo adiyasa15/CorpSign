@@ -158,6 +158,7 @@ export async function whatsappSignerCompleted(opts: {
   docId: number;
   docTitle: string;
   signerName: string;
+  uploaderName: string;
   uploaderEmail: string;
   nextSigner?: { name: string; email: string };
   ccEmails: string[];
@@ -165,7 +166,7 @@ export async function whatsappSignerCompleted(opts: {
   const { enabled, ratePerSecond } = await getSettings();
   if (!enabled) return;
 
-  const { docId, docTitle, signerName, uploaderEmail, nextSigner, ccEmails } = opts;
+  const { docId, docTitle, signerName, uploaderName, uploaderEmail, nextSigner, ccEmails } = opts;
   const link = docUrl(docId);
 
   const targets: { email: string; text: string }[] = [];
@@ -190,6 +191,7 @@ export async function whatsappSignerCompleted(opts: {
         `✍️ *Action Required: It's Your Turn to Sign*`,
         ``,
         `📄 *${docTitle}*`,
+        `👤 Requested by: ${uploaderName}`,
         `👆 ${signerName} has already signed. You're next.`,
         ``,
         `👉 Open & Sign: ${link}`,
